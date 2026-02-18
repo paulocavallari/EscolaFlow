@@ -1,0 +1,514 @@
+// app/(app)/occurrences/[id].tsx
+// Occurrence detail screen with treatment flow
+
+import React, { useState, useCallback } from 'react';
+import {
+    View,
+    Text,
+    ScrollView,
+    TouchableOpacity,
+    StyleSheet,
+    Alert,
+    ActivityIndicator,
+} from 'react-native';
+import { useLocalSearchParams, router } from 'expo-router';
+import { useOccurrenceDetail, useAddAction, useProcessAudio } from '../../../src/hooks/useOccurrences';
+import { useProfile } from '../../../src/hooks/useProfile';
+import { StatusBadge } from '../../../src/components/StatusBadge';
+import { AudioRecorder } from '../../../src/components/AudioRecorder';
+import { AIReviewModal } from '../../../src/components/AIReviewModal';
+import {
+    OccurrenceStatus,
+    ActionType,
+    UserRole,
+} from '../../../src/types/database';
+import { COLORS, ACTION_TYPE_LABELS } from '../../../src/lib/constants';
+
+export default function OccurrenceDetailScreen() {
+    const { id } = useLocalSearchParams<{ id: string }>();
+    const { profileId, role } = useProfile();
+
+    const { data: occurrence, isLoading } = useOccurrenceDetail(id ?? '');
+    const addAction = useAddAction();
+    const processAudio = useProcessAudio();
+
+    // Treatment state
+    const [showTreatment, setShowTreatment] = useState(false);
+    const [treatmentOriginal, setTreatmentOriginal] = useState('');
+    const [treatmentFormal, setTreatmentFormal] = useState('');
+    const [showReviewModal, setShowReviewModal] = useState(false);
+    const [pendingActionType, setPendingActionType] = useState<'resolve' | 'escalate' | 'vp_resolve'>('resolve');
+
+    // Can this user treat this occurrence?
+    const canTreat =
+        occurrence &&
+        profileId &&
+        (
+            (occurrence.status === OccurrenceStatus.PENDING_TUTOR && occurrence.tutor_id === profileId) ||
+            (occurrence.status === OccurrenceStatus.ESCALATED_VP && role === UserRole.VICE_DIRECTOR)
+        );
+
+    // Handle recorded audio for treatment
+    const handleTreatmentAudio = useCallback(async (audioUri: string) => {
+        try {
+            const result = await processAudio.mutateAsync(audioUri);
+            setTreatmentOriginal(result.original);
+            setTreatmentFormal(result.formal);
+            setShowReviewModal(true);
+        } catch (err) {
+            Alert.alert('Erro', 'Falha ao processar o áudio.');
+        }
+    }, [processAudio]);
+
+    // Submit treatment action
+    const handleSubmitAction = useCallback(async (description: string) => {
+        if (!occurrence || !profileId) return;
+
+        setShowReviewModal(false);
+
+        let actionType: ActionType;
+        let newStatus: OccurrenceStatus;
+
+        if (pendingActionType === 'resolve') {
+            actionType = ActionType.RESOLUTION;
+            newStatus = OccurrenceStatus.CONCLUDED;
+        } else if (pendingActionType === 'escalate') {
+            actionType = ActionType.ESCALATION;
+            newStatus = OccurrenceStatus.ESCALATED_VP;
+        } else {
+            actionType = ActionType.VP_RESOLUTION;
+            newStatus = OccurrenceStatus.CONCLUDED;
+        }
+
+        try {
+            await addAction.mutateAsync({
+                occurrence_id: occurrence.id,
+                author_id: profileId,
+                description,
+                action_type: actionType,
+                newStatus,
+            });
+
+            Alert.alert('Sucesso', 'Tratativa registrada com sucesso!', [
+                { text: 'OK', onPress: () => router.back() },
+            ]);
+        } catch (err) {
+            Alert.alert('Erro', 'Falha ao registrar a tratativa.');
+        }
+    }, [occurrence, profileId, pendingActionType, addAction]);
+
+    if (isLoading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+            </View>
+        );
+    }
+
+    if (!occurrence) {
+        return (
+            <View style={styles.loadingContainer}>
+                <Text style={styles.errorText}>Ocorrência não encontrada.</Text>
+            </View>
+        );
+    }
+
+    const createdDate = new Date(occurrence.created_at).toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+
+    return (
+        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+            {/* Header Info */}
+            <View style={styles.headerCard}>
+                <View style={styles.headerTop}>
+                    <StatusBadge status={occurrence.status} />
+                    <Text style={styles.date}>{createdDate}</Text>
+                </View>
+
+                <Text style={styles.studentName}>
+                    {occurrence.student?.name ?? 'Aluno'}
+                </Text>
+                <Text style={styles.className}>
+                    {occurrence.student?.class?.name ?? ''}
+                </Text>
+
+                <View style={styles.metaRow}>
+                    <View style={styles.metaItem}>
+                        <Text style={styles.metaLabel}>Autor</Text>
+                        <Text style={styles.metaValue}>{occurrence.author?.full_name ?? '-'}</Text>
+                    </View>
+                    <View style={styles.metaItem}>
+                        <Text style={styles.metaLabel}>Tutor</Text>
+                        <Text style={styles.metaValue}>{occurrence.tutor?.full_name ?? '-'}</Text>
+                    </View>
+                </View>
+            </View>
+
+            {/* Formal Description */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>📝 Descrição Formal</Text>
+                <View style={styles.descriptionBox}>
+                    <Text style={styles.descriptionText}>{occurrence.description_formal}</Text>
+                </View>
+            </View>
+
+            {/* Original Transcription */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>🎙️ Transcrição Original</Text>
+                <View style={[styles.descriptionBox, styles.originalBox]}>
+                    <Text style={[styles.descriptionText, styles.originalText]}>
+                        {occurrence.description_original}
+                    </Text>
+                </View>
+            </View>
+
+            {/* Action Timeline */}
+            {occurrence.actions && occurrence.actions.length > 0 && (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>📋 Histórico de Tratativas</Text>
+                    {occurrence.actions.map((action, idx) => (
+                        <View key={action.id} style={styles.timelineItem}>
+                            <View style={styles.timelineDot} />
+                            {idx < occurrence.actions.length - 1 && (
+                                <View style={styles.timelineLine} />
+                            )}
+                            <View style={styles.timelineContent}>
+                                <View style={styles.timelineHeader}>
+                                    <Text style={styles.timelineType}>
+                                        {ACTION_TYPE_LABELS[action.action_type]}
+                                    </Text>
+                                    <Text style={styles.timelineDate}>
+                                        {new Date(action.created_at).toLocaleDateString('pt-BR', {
+                                            day: '2-digit',
+                                            month: '2-digit',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                        })}
+                                    </Text>
+                                </View>
+                                <Text style={styles.timelineAuthor}>
+                                    Por: {action.author?.full_name ?? '-'}
+                                </Text>
+                                <Text style={styles.timelineDescription}>
+                                    {action.description}
+                                </Text>
+                            </View>
+                        </View>
+                    ))}
+                </View>
+            )}
+
+            {/* Treatment Section */}
+            {canTreat && !showTreatment && (
+                <View style={styles.treatmentPrompt}>
+                    <Text style={styles.treatmentTitle}>
+                        {occurrence.status === OccurrenceStatus.ESCALATED_VP
+                            ? '🏢 Devolutiva da Vice-Direção'
+                            : '📣 Registrar Tratativa'}
+                    </Text>
+                    <TouchableOpacity
+                        style={styles.treatButton}
+                        onPress={() => setShowTreatment(true)}
+                    >
+                        <Text style={styles.treatButtonText}>Iniciar Tratativa</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {canTreat && showTreatment && (
+                <View style={styles.treatmentSection}>
+                    <Text style={styles.treatmentTitle}>🎙️ Gravar Providência</Text>
+
+                    <AudioRecorder
+                        onRecordingComplete={handleTreatmentAudio}
+                        isProcessing={processAudio.isPending}
+                    />
+
+                    {/* Action buttons */}
+                    <View style={styles.actionButtons}>
+                        {occurrence.status === OccurrenceStatus.PENDING_TUTOR && (
+                            <>
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, styles.resolveBtn]}
+                                    onPress={() => {
+                                        setPendingActionType('resolve');
+                                        if (treatmentFormal) setShowReviewModal(true);
+                                        else Alert.alert('Atenção', 'Grave o áudio da providência primeiro.');
+                                    }}
+                                >
+                                    <Text style={styles.actionBtnText}>✅ Resolver</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, styles.escalateBtn]}
+                                    onPress={() => {
+                                        setPendingActionType('escalate');
+                                        if (treatmentFormal) setShowReviewModal(true);
+                                        else Alert.alert('Atenção', 'Grave o áudio da providência primeiro.');
+                                    }}
+                                >
+                                    <Text style={styles.actionBtnText}>⬆️ Escalar</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
+
+                        {occurrence.status === OccurrenceStatus.ESCALATED_VP && (
+                            <TouchableOpacity
+                                style={[styles.actionBtn, styles.resolveBtn]}
+                                onPress={() => {
+                                    setPendingActionType('vp_resolve');
+                                    if (treatmentFormal) setShowReviewModal(true);
+                                    else Alert.alert('Atenção', 'Grave o áudio da devolutiva primeiro.');
+                                }}
+                            >
+                                <Text style={styles.actionBtnText}>✅ Concluir</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                </View>
+            )}
+
+            {/* Loading overlay for action submission */}
+            {addAction.isPending && (
+                <View style={styles.savingOverlay}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                    <Text style={styles.savingText}>Salvando tratativa...</Text>
+                </View>
+            )}
+
+            {/* AI Review Modal for treatment */}
+            <AIReviewModal
+                visible={showReviewModal}
+                originalText={treatmentOriginal}
+                formalText={treatmentFormal}
+                onConfirm={handleSubmitAction}
+                onReRecord={() => {
+                    setShowReviewModal(false);
+                    setTreatmentOriginal('');
+                    setTreatmentFormal('');
+                }}
+                onClose={() => setShowReviewModal(false)}
+            />
+        </ScrollView>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: COLORS.background,
+    },
+    content: {
+        padding: 20,
+        paddingBottom: 40,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: COLORS.background,
+    },
+    errorText: {
+        fontSize: 16,
+        color: COLORS.textSecondary,
+    },
+    headerCard: {
+        backgroundColor: COLORS.surface,
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: COLORS.border + '30',
+    },
+    headerTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    date: {
+        fontSize: 12,
+        color: COLORS.textMuted,
+    },
+    studentName: {
+        fontSize: 22,
+        fontWeight: '800',
+        color: COLORS.textPrimary,
+    },
+    className: {
+        fontSize: 14,
+        color: COLORS.textSecondary,
+        marginTop: 2,
+        marginBottom: 12,
+    },
+    metaRow: {
+        flexDirection: 'row',
+        gap: 20,
+    },
+    metaItem: {},
+    metaLabel: {
+        fontSize: 11,
+        color: COLORS.textMuted,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    metaValue: {
+        fontSize: 14,
+        color: COLORS.textPrimary,
+        fontWeight: '500',
+        marginTop: 2,
+    },
+    section: {
+        marginBottom: 20,
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: COLORS.textPrimary,
+        marginBottom: 10,
+    },
+    descriptionBox: {
+        backgroundColor: COLORS.surface,
+        borderRadius: 12,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: COLORS.border + '30',
+    },
+    descriptionText: {
+        fontSize: 15,
+        color: COLORS.textPrimary,
+        lineHeight: 24,
+    },
+    originalBox: {
+        backgroundColor: COLORS.surfaceLight + '50',
+        borderColor: COLORS.border + '20',
+    },
+    originalText: {
+        fontStyle: 'italic',
+        color: COLORS.textSecondary,
+    },
+    timelineItem: {
+        flexDirection: 'row',
+        marginBottom: 12,
+        paddingLeft: 4,
+    },
+    timelineDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: COLORS.primary,
+        marginTop: 6,
+        marginRight: 12,
+        zIndex: 1,
+    },
+    timelineLine: {
+        position: 'absolute',
+        left: 8,
+        top: 16,
+        bottom: -12,
+        width: 2,
+        backgroundColor: COLORS.border + '40',
+    },
+    timelineContent: {
+        flex: 1,
+        backgroundColor: COLORS.surface,
+        borderRadius: 12,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: COLORS.border + '20',
+    },
+    timelineHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 4,
+    },
+    timelineType: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: COLORS.primary,
+    },
+    timelineDate: {
+        fontSize: 11,
+        color: COLORS.textMuted,
+    },
+    timelineAuthor: {
+        fontSize: 12,
+        color: COLORS.textSecondary,
+        marginBottom: 6,
+    },
+    timelineDescription: {
+        fontSize: 14,
+        color: COLORS.textPrimary,
+        lineHeight: 20,
+    },
+    treatmentPrompt: {
+        backgroundColor: COLORS.primary + '10',
+        borderRadius: 16,
+        padding: 20,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: COLORS.primary + '30',
+        marginTop: 8,
+    },
+    treatmentTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: COLORS.textPrimary,
+        marginBottom: 12,
+    },
+    treatButton: {
+        backgroundColor: COLORS.primary,
+        borderRadius: 12,
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+    },
+    treatButtonText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: COLORS.white,
+    },
+    treatmentSection: {
+        backgroundColor: COLORS.surface,
+        borderRadius: 16,
+        padding: 20,
+        marginTop: 8,
+        borderWidth: 1,
+        borderColor: COLORS.border + '30',
+    },
+    actionButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 16,
+    },
+    actionBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    resolveBtn: {
+        backgroundColor: COLORS.success,
+    },
+    escalateBtn: {
+        backgroundColor: COLORS.warning,
+    },
+    actionBtnText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: COLORS.white,
+    },
+    savingOverlay: {
+        alignItems: 'center',
+        paddingVertical: 24,
+    },
+    savingText: {
+        marginTop: 8,
+        fontSize: 14,
+        color: COLORS.textSecondary,
+    },
+});
