@@ -141,6 +141,26 @@ export function useAddAction() {
     });
 }
 
+// ---- Delete Occurrence ----
+export function useDeleteOccurrence() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (id: string): Promise<void> => {
+            const { error } = await supabase
+                .from('occurrences')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            // Invalidate the cache to ensure list refetches
+            queryClient.invalidateQueries({ queryKey: OCCURRENCE_KEYS.lists() });
+        },
+    });
+}
+
 // ---- Process Audio ----
 export function useProcessAudio() {
     return useMutation({

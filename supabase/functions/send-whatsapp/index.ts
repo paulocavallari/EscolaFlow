@@ -128,6 +128,29 @@ serve(async (req: Request) => {
                 const result = await sendEvolutionMessage(tutor.whatsapp_number, message);
                 results.push({ recipient: 'tutor', ...result });
             }
+
+            // ALSO notify VPs
+            const { data: vps } = await supabaseAdmin
+                .from('profiles')
+                .select('id, full_name, whatsapp_number')
+                .eq('role', 'vice_director')
+                .not('whatsapp_number', 'is', null);
+
+            if (vps) {
+                for (const vp of vps) {
+                    if (vp.whatsapp_number) {
+                        const message =
+                            `🔔 *Nova Ocorrência Escolar Registrada*\n\n` +
+                            `Olá, ${vp.full_name}!\n\n` +
+                            `O(a) Prof(a). ${author?.full_name ?? 'Professor'} acabou de registrar uma nova ocorrência para o(a) aluno(a) *${studentName}*.\n\n` +
+                            (tutor ? `O tutor responsável foi notificado.\n` : `Esta ocorrência NÃO possui um tutor atribuído e necessita de sua intervenção rápida.\n`) +
+                            `Acesse o app EscolaFlow para acompanhar.`;
+
+                        const result = await sendEvolutionMessage(vp.whatsapp_number, message);
+                        results.push({ recipient: `vp_created_${vp.id}`, ...result });
+                    }
+                }
+            }
         }
 
         // ---- Event: Status Changed ----

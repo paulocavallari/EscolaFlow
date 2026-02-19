@@ -10,9 +10,10 @@ import {
     StyleSheet,
     Alert,
     ActivityIndicator,
+    Platform,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useOccurrenceDetail, useAddAction, useProcessAudio } from '../../../src/hooks/useOccurrences';
+import { useOccurrenceDetail, useAddAction, useProcessAudio, useDeleteOccurrence } from '../../../src/hooks/useOccurrences';
 import { useProfile } from '../../../src/hooks/useProfile';
 import { StatusBadge } from '../../../src/components/StatusBadge';
 import { AudioRecorder } from '../../../src/components/AudioRecorder';
@@ -39,13 +40,13 @@ export default function OccurrenceDetailScreen() {
     const [showReviewModal, setShowReviewModal] = useState(false);
     const [pendingActionType, setPendingActionType] = useState<'resolve' | 'escalate' | 'vp_resolve'>('resolve');
 
-    // Can this user treat this occurrence?
     const canTreat =
         occurrence &&
         profileId &&
         (
             (occurrence.status === OccurrenceStatus.PENDING_TUTOR && occurrence.tutor_id === profileId) ||
-            (occurrence.status === OccurrenceStatus.ESCALATED_VP && role === UserRole.VICE_DIRECTOR)
+            role === UserRole.VICE_DIRECTOR ||
+            role === UserRole.ADMIN
         );
 
     // Handle recorded audio for treatment
@@ -59,6 +60,38 @@ export default function OccurrenceDetailScreen() {
             Alert.alert('Erro', 'Falha ao processar o áudio.');
         }
     }, [processAudio]);
+
+    const deleteOccurrence = useDeleteOccurrence();
+
+    const handleDelete = useCallback(() => {
+        if (!occurrence) return;
+
+        const performDelete = async () => {
+            try {
+                await deleteOccurrence.mutateAsync(occurrence.id);
+                if (Platform.OS === 'web') window.alert('Ocorrência excluída com sucesso.');
+                else Alert.alert('Sucesso', 'Ocorrência excluída com sucesso.');
+                router.replace('/(app)/occurrences' as any);
+            } catch (err: any) {
+                const msg = err.message || 'Falha ao excluir ocorrência.';
+                if (Platform.OS === 'web') window.alert('Erro: ' + msg);
+                else Alert.alert('Erro', msg);
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm('Deseja realmente excluir esta ocorrência de forma permanente?')) performDelete();
+        } else {
+            Alert.alert(
+                'Confirmar Exclusão',
+                'Deseja realmente excluir esta ocorrência de forma permanente?',
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { text: 'Excluir', style: 'destructive', onPress: performDelete }
+                ]
+            );
+        }
+    }, [occurrence, deleteOccurrence]);
 
     // Submit treatment action
     const handleSubmitAction = useCallback(async (description: string) => {
@@ -231,44 +264,50 @@ export default function OccurrenceDetailScreen() {
 
                     {/* Action buttons */}
                     <View style={styles.actionButtons}>
-                        {occurrence.status === OccurrenceStatus.PENDING_TUTOR && (
-                            <>
-                                <TouchableOpacity
-                                    style={[styles.actionBtn, styles.resolveBtn]}
-                                    onPress={() => {
-                                        setPendingActionType('resolve');
-                                        if (treatmentFormal) setShowReviewModal(true);
-                                        else Alert.alert('Atenção', 'Grave o áudio da providência primeiro.');
-                                    }}
-                                >
-                                    <Text style={styles.actionBtnText}>✅ Resolver</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.actionBtn, styles.escalateBtn]}
-                                    onPress={() => {
-                                        setPendingActionType('escalate');
-                                        if (treatmentFormal) setShowReviewModal(true);
-                                        else Alert.alert('Atenção', 'Grave o áudio da providência primeiro.');
-                                    }}
-                                >
-                                    <Text style={styles.actionBtnText}>⬆️ Escalar</Text>
-                                </TouchableOpacity>
-                            </>
-                        )}
-
-                        {occurrence.status === OccurrenceStatus.ESCALATED_VP && (
+                        {occurrence.status !== OccurrenceStatus.CONCLUDED && (
                             <TouchableOpacity
                                 style={[styles.actionBtn, styles.resolveBtn]}
                                 onPress={() => {
-                                    setPendingActionType('vp_resolve');
+                                    setPendingActionType(
+                                        role === UserRole.VICE_DIRECTOR ? 'vp_resolve' : 'resolve'
+                                    );
                                     if (treatmentFormal) setShowReviewModal(true);
-                                    else Alert.alert('Atenção', 'Grave o áudio da devolutiva primeiro.');
+                                    else {
+                                        if (Platform.OS === 'web') window.alert('Grave o áudio primeiro.');
+                                        else Alert.alert('Atenção', 'Grave o áudio da providência primeiro.');
+                                    }
                                 }}
                             >
                                 <Text style={styles.actionBtnText}>✅ Concluir</Text>
                             </TouchableOpacity>
                         )}
+                        {occurrence.status === OccurrenceStatus.PENDING_TUTOR && role !== UserRole.VICE_DIRECTOR && (
+                            <TouchableOpacity
+                                style={[styles.actionBtn, styles.escalateBtn]}
+                                onPress={() => {
+                                    setPendingActionType('escalate');
+                                    if (treatmentFormal) setShowReviewModal(true);
+                                    else {
+                                        if (Platform.OS === 'web') window.alert('Grave o áudio primeiro.');
+                                        else Alert.alert('Atenção', 'Grave o áudio primeiro.');
+                                    }
+                                }}
+                            >
+                                <Text style={styles.actionBtnText}>⬆️ Escalar para VP</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
+                </View>
+            )}
+
+            {role === UserRole.ADMIN && (
+                <View style={styles.adminSection}>
+                    <TouchableOpacity
+                        style={[styles.actionBtn, { backgroundColor: '#FF4444' }]}
+                        onPress={handleDelete}
+                    >
+                        <Text style={styles.actionBtnText}>Excluir Ocorrência</Text>
+                    </TouchableOpacity>
                 </View>
             )}
 
@@ -484,6 +523,10 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: 12,
         marginTop: 16,
+    },
+    adminSection: {
+        marginTop: 24,
+        paddingHorizontal: 16,
     },
     actionBtn: {
         flex: 1,
