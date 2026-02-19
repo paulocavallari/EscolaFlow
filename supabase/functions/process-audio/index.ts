@@ -64,8 +64,12 @@ serve(async (req: Request) => {
         const audioBuffer = await audioFile.arrayBuffer();
         const audioBase64 = base64Encode(new Uint8Array(audioBuffer));
 
-        // Determine MIME type
-        const mimeType = audioFile.type || 'audio/mp4';
+        // Determine MIME type (m4a is audio/mp4 for Gemini)
+        const mimeType = audioFile.type && audioFile.type !== 'application/octet-stream'
+            ? audioFile.type
+            : 'audio/mp4';
+
+        console.log(`Processing audio: size=${audioBuffer.byteLength} bytes, mimeType=${mimeType}`);
 
         // ---- Step 1: Transcribe audio with Gemini (multimodal) ----
         const transcriptionResponse = await fetch(
@@ -107,8 +111,29 @@ serve(async (req: Request) => {
         }
 
         const transcriptionData = await transcriptionResponse.json();
-        const transcription =
-            transcriptionData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+
+        // Check for safety blocks or empty candidates
+        const candidate = transcriptionData.candidates?.[0];
+        if (!candidate) {
+            const promptFeedback = transcriptionData.promptFeedback;
+            console.error('Gemini returned no candidates. promptFeedback:', JSON.stringify(promptFeedback));
+            return new Response(JSON.stringify({
+                original: 'Áudio não reconhecido',
+                formal: '',
+                error: 'Gemini returned no response. Possible safety block or unsupported audio format.',
+            }), {
+                status: 200,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+        }
+
+        // Warn if the response was cut short (e.g. SAFETY, MAX_TOKENS)
+        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+            console.warn(`Gemini transcription finishReason: ${candidate.finishReason}`);
+        }
+
+        const transcription = candidate.content?.parts?.[0]?.text?.trim() ?? '';
+        console.log(`Transcription result (${transcription.length} chars): "${transcription.slice(0, 100)}..."`);
 
         if (!transcription || transcription === 'Áudio não reconhecido') {
             return new Response(JSON.stringify({

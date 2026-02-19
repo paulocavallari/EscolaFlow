@@ -145,16 +145,16 @@ export function useAddAction() {
 export function useProcessAudio() {
     return useMutation({
         mutationFn: async (audioUri: string): Promise<AudioProcessingResult> => {
-            // Read audio file and create form data
+            // Build FormData with the recorded audio file
             const formData = new FormData();
 
             if (Platform.OS === 'web') {
-                // On Web, we need to fetch the blob from the blob: URI
-                const response = await fetch(audioUri);
-                const blob = await response.blob();
+                // On Web: fetch blob from the blob: URI
+                const blobResponse = await fetch(audioUri);
+                const blob = await blobResponse.blob();
                 formData.append('audio', blob, 'recording.m4a');
             } else {
-                // On Native, we use the object format
+                // On Native: pass the file object directly
                 formData.append('audio', {
                     uri: audioUri,
                     type: 'audio/m4a',
@@ -162,16 +162,48 @@ export function useProcessAudio() {
                 } as any);
             }
 
-            const { data, error } = await supabase.functions.invoke('process-audio', {
+            // Get the current session token for Authorization header
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                throw new Error('User is not authenticated');
+            }
+
+            const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+            const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+            const functionUrl = `${supabaseUrl}/functions/v1/process-audio`;
+
+            // Use native fetch so FormData is sent as proper multipart/form-data
+            // (supabase.functions.invoke serializes FormData as JSON, breaking the upload)
+            const response = await fetch(functionUrl, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'apikey': supabaseAnonKey,
+                    // Do NOT set Content-Type — fetch sets it automatically with the correct boundary
+                },
                 body: formData,
             });
 
-            if (error) {
-                console.error('Process audio error:', error);
-                throw new Error(error.message || 'Audio processing failed');
+            let responseData: any;
+            try {
+                responseData = await response.json();
+            } catch {
+                throw new Error(`Audio processing failed: invalid response (status ${response.status})`);
             }
 
-            return data;
+            if (!response.ok) {
+                const message = responseData?.error ?? responseData?.details ?? 'Audio processing failed';
+                console.error('Process audio error:', message, responseData);
+                throw new Error(message);
+            }
+
+            // Edge function may return 200 with an error field on partial failures
+            if (responseData?.error && !responseData?.original) {
+                console.error('Process audio returned error:', responseData.error);
+                throw new Error(responseData.error);
+            }
+
+            return responseData as AudioProcessingResult;
         },
     });
 }
