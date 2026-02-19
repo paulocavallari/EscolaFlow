@@ -72,9 +72,9 @@ export default function UsersScreen() {
             const { error } = await adminSupabase
                 .from('profiles')
                 .update({
-                    full_name: editName,
+                    full_name: editName.trim(),
                     role: editRole,
-                    whatsapp_number: editWhatsApp || null,
+                    whatsapp_number: editWhatsApp.trim() || null,
                 })
                 .eq('id', editingUser.id)
                 .select()
@@ -440,12 +440,12 @@ export default function UsersScreen() {
                             placeholderTextColor={COLORS.textMuted}
                         />
 
-                        <Text style={styles.fieldLabel}>WhatsApp</Text>
+                        <Text style={styles.fieldLabel}>WhatsApp (Apenas Números e DDI, Ex: 5511999999999)</Text>
                         <TextInput
                             style={styles.fieldInput}
                             value={editWhatsApp}
                             onChangeText={setEditWhatsApp}
-                            placeholder="+55 11 99999-9999"
+                            placeholder="5511999999999"
                             placeholderTextColor={COLORS.textMuted}
                             keyboardType="phone-pad"
                         />
