@@ -1,10 +1,11 @@
 // src/services/whatsappService.ts
-// WhatsApp messaging via Evolution API
+// WhatsApp messaging via Supabase Edge Function Proxy
 
-// EXPO_PUBLIC_ prefix is required for variables to be bundled into the Expo client
+import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase';
+
+// Helper instance info
 const API_URL = process.env.EXPO_PUBLIC_EVOLUTION_API_URL ?? 'http://137.131.213.8:8080';
 const API_KEY = process.env.EXPO_PUBLIC_EVOLUTION_API_KEY ?? 'Pa7412365**';
-const INSTANCE = process.env.EXPO_PUBLIC_EVOLUTION_INSTANCE_NAME ?? 'zap';
 
 interface SendMessageResponse {
     key: {
@@ -30,26 +31,28 @@ export async function sendWhatsAppMessage(phone: string, text: string): Promise<
         }
 
         const formattedPhone = formatPhone(phone);
-        const url = `${API_URL}/message/sendText/${INSTANCE}`;
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token || supabaseAnonKey;
 
-        console.log('Sending WhatsApp to:', url, 'number:', formattedPhone);
+        // Use our proxy edge-function to avert Mixed Content blocked by Vercel
+        const fetchUrl = `${supabaseUrl}/functions/v1/send-whatsapp-manual`;
 
-        // Evolution API v2: body must contain only 'number' and 'textMessage'
-        // Adding extra fields like 'options' causes a 400 Bad Request
-        const response = await fetch(url, {
+        console.log('Proxying WhatsApp to:', fetchUrl, 'number:', formattedPhone);
+
+        const response = await fetch(fetchUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'apikey': API_KEY,
+                'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
-                number: formattedPhone,
-                textMessage: { text },
+                phone: formattedPhone,
+                text,
             }),
         });
 
         const textResponse = await response.text();
-        console.log('Raw API Response:', textResponse);
+        console.log('Supabase Proxy Response:', textResponse);
 
         try {
             const data = JSON.parse(textResponse);
