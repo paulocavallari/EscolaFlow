@@ -2,6 +2,7 @@
 // TanStack Query hooks for occurrences CRUD operations
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import {
     Occurrence,
@@ -146,11 +147,20 @@ export function useProcessAudio() {
         mutationFn: async (audioUri: string): Promise<AudioProcessingResult> => {
             // Read audio file and create form data
             const formData = new FormData();
-            formData.append('audio', {
-                uri: audioUri,
-                type: 'audio/m4a',
-                name: 'recording.m4a',
-            } as any);
+
+            if (Platform.OS === 'web') {
+                // On Web, we need to fetch the blob from the blob: URI
+                const response = await fetch(audioUri);
+                const blob = await response.blob();
+                formData.append('audio', blob, 'recording.m4a');
+            } else {
+                // On Native, we use the object format
+                formData.append('audio', {
+                    uri: audioUri,
+                    type: 'audio/m4a',
+                    name: 'recording.m4a',
+                } as any);
+            }
 
             const { data, error } = await supabase.functions.invoke('process-audio', {
                 body: formData,

@@ -19,7 +19,8 @@ import { useStudentsList, useClassesList } from '../../../src/hooks/useStudents'
 import { useCreateOccurrence, useProcessAudio } from '../../../src/hooks/useOccurrences';
 import { useProfile } from '../../../src/hooks/useProfile';
 import { COLORS } from '../../../src/lib/constants';
-import { Student } from '../../../src/types/database';
+import { Student, StudentWithRelations } from '../../../src/types/database';
+import { sendWhatsAppMessage } from '../../../src/services/whatsappService';
 
 type Step = 'select_student' | 'record_audio' | 'review';
 
@@ -31,7 +32,7 @@ export default function CreateOccurrenceScreen() {
 
     // Student selection
     const [selectedClassId, setSelectedClassId] = useState<string>('');
-    const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+    const [selectedStudent, setSelectedStudent] = useState<StudentWithRelations | null>(null);
     const [studentSearch, setStudentSearch] = useState('');
 
     // Audio / AI
@@ -76,6 +77,19 @@ export default function CreateOccurrenceScreen() {
                 description_original: originalText,
                 description_formal: editedText,
             });
+
+            // Send WhatsApp if Tutor has phone
+            if (selectedStudent.tutor?.whatsapp_number) {
+                const message = `*Nova Ocorrência Escolar*\n\nAluno: ${selectedStudent.name}\nTurma: ${selectedStudent.class?.name || 'N/A'}\n\nResumo: ${editedText}\n\nAcesse o app para mais detalhes.`;
+
+                sendWhatsAppMessage(selectedStudent.tutor.whatsapp_number, message)
+                    .then(success => {
+                        if (success) console.log('WhatsApp notification sent');
+                        else console.warn('Failed to send WhatsApp notification');
+                    });
+            } else {
+                console.log('No tutor phone available for WhatsApp notification');
+            }
 
             Alert.alert('Sucesso', 'Ocorrência registrada com sucesso!', [
                 { text: 'OK', onPress: () => router.back() },

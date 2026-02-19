@@ -9,6 +9,7 @@ import {
     StyleSheet,
     Animated,
     ActivityIndicator,
+    Platform,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { COLORS } from '../lib/constants';
@@ -46,12 +47,12 @@ export function AudioRecorder({ onRecordingComplete, isProcessing = false }: Aud
                     Animated.timing(pulseAnim, {
                         toValue: 1.3,
                         duration: 600,
-                        useNativeDriver: true,
+                        useNativeDriver: Platform.OS !== 'web',
                     }),
                     Animated.timing(pulseAnim, {
                         toValue: 1,
                         duration: 600,
-                        useNativeDriver: true,
+                        useNativeDriver: Platform.OS !== 'web',
                     }),
                 ])
             );
