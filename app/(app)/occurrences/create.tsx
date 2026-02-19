@@ -59,8 +59,20 @@ export default function CreateOccurrenceScreen() {
             setFormalText(result.formal);
             setShowReviewModal(true);
         } catch (err) {
-            Alert.alert('Erro', 'Falha ao processar o áudio. Tente novamente.');
+            console.error('Audio processing error:', err);
+            Alert.alert(
+                'Erro no processamento',
+                err instanceof Error
+                    ? err.message
+                    : 'Falha ao processar o áudio. Tente novamente.',
+                [{ text: 'OK' }]
+            );
         }
+    }, [processAudio]);
+
+    // Cancel processing and reset so user can re-record
+    const handleCancelProcessing = useCallback(() => {
+        processAudio.reset();
     }, [processAudio]);
 
     // Handle AI review confirmation
@@ -212,6 +224,7 @@ export default function CreateOccurrenceScreen() {
                     <AudioRecorder
                         onRecordingComplete={handleRecordingComplete}
                         isProcessing={processAudio.isPending}
+                        onCancelProcessing={handleCancelProcessing}
                     />
 
                     <TouchableOpacity

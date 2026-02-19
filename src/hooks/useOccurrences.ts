@@ -151,11 +151,15 @@ export function useProcessAudio() {
             let audioBase64: string;
             let mimeType: string;
 
+            console.log('[processAudio] Starting. Platform:', Platform.OS, 'URI:', audioUri.slice(0, 60));
+
             if (Platform.OS === 'web') {
                 // Web: audioUri is a blob: URL
+                console.log('[processAudio] Fetching blob from URI...');
                 const blobResponse = await fetch(audioUri);
                 const blob = await blobResponse.blob();
                 mimeType = blob.type || 'audio/webm';
+                console.log('[processAudio] Blob fetched. size=', blob.size, 'type=', mimeType);
 
                 const arrayBuffer = await blob.arrayBuffer();
                 const uint8 = new Uint8Array(arrayBuffer);
@@ -168,9 +172,11 @@ export function useProcessAudio() {
                 audioBase64 = btoa(binary);
             } else {
                 // Native: audioUri is a file:// path — read it via fetch (RN supports this)
+                console.log('[processAudio] Fetching native file...');
                 const fileResponse = await fetch(audioUri);
                 const blob = await fileResponse.blob();
                 mimeType = 'audio/mp4';
+                console.log('[processAudio] Native file fetched. size=', blob.size);
 
                 const arrayBuffer = await blob.arrayBuffer();
                 const uint8 = new Uint8Array(arrayBuffer);
@@ -182,10 +188,27 @@ export function useProcessAudio() {
                 audioBase64 = btoa(binary);
             }
 
+            console.log('[processAudio] Base64 ready. length=', audioBase64.length, 'mimeType=', mimeType);
+
             // supabase.functions.invoke handles anon key + JWT auth automatically
-            const { data, error } = await supabase.functions.invoke('process-audio', {
+            // Wrap with a timeout so we never hang indefinitely
+            const TIMEOUT_MS = 90_000; // 90 seconds
+
+            console.log('[processAudio] Invoking Edge Function process-audio...');
+            const invokePromise = supabase.functions.invoke('process-audio', {
                 body: { audio: audioBase64, mimeType },
             });
+
+            const timeoutPromise = new Promise<never>((_, reject) =>
+                setTimeout(
+                    () => reject(new Error('Tempo limite atingido. O servidor demorou demais para responder.')),
+                    TIMEOUT_MS
+                )
+            );
+
+            const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as Awaited<typeof invokePromise>;
+
+            console.log('[processAudio] Edge Function responded. error=', error, 'data keys=', data ? Object.keys(data) : null);
 
             if (error) {
                 console.error('Process audio invoke error:', error);

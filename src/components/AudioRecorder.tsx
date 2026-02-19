@@ -17,9 +17,10 @@ import { COLORS } from '../lib/constants';
 interface AudioRecorderProps {
     onRecordingComplete: (uri: string) => void;
     isProcessing?: boolean;
+    onCancelProcessing?: () => void;
 }
 
-export function AudioRecorder({ onRecordingComplete, isProcessing = false }: AudioRecorderProps) {
+export function AudioRecorder({ onRecordingComplete, isProcessing = false, onCancelProcessing }: AudioRecorderProps) {
     const [isRecording, setIsRecording] = useState(false);
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [permissionGranted, setPermissionGranted] = useState(false);
@@ -133,6 +134,14 @@ export function AudioRecorder({ onRecordingComplete, isProcessing = false }: Aud
                 <Text style={styles.processingSubtext}>
                     Transcrevendo e reescrevendo formalmente
                 </Text>
+                {onCancelProcessing && (
+                    <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={onCancelProcessing}
+                    >
+                        <Text style={styles.cancelButtonText}>Cancelar</Text>
+                    </TouchableOpacity>
+                )}
             </View>
         );
     }
@@ -238,6 +247,19 @@ const styles = StyleSheet.create({
         marginTop: 4,
         fontSize: 13,
         color: COLORS.textSecondary,
+    },
+    cancelButton: {
+        marginTop: 24,
+        paddingHorizontal: 24,
+        paddingVertical: 10,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: COLORS.textMuted,
+    },
+    cancelButtonText: {
+        fontSize: 14,
+        color: COLORS.textSecondary,
+        fontWeight: '500',
     },
 });
 
