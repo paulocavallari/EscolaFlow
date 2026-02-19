@@ -69,16 +69,35 @@ export default function UsersScreen() {
         if (!editingUser) return;
 
         try {
-            await updateProfile.mutateAsync({
-                id: editingUser.id,
-                full_name: editName,
-                role: editRole,
-                whatsapp_number: editWhatsApp || null,
-            });
+            const { error } = await adminSupabase
+                .from('profiles')
+                .update({
+                    full_name: editName,
+                    role: editRole,
+                    whatsapp_number: editWhatsApp || null,
+                })
+                .eq('id', editingUser.id)
+                .select()
+                .single();
+
+            if (error) {
+                console.error('Update using adminSupabase failed:', error);
+                throw error;
+            }
+
             setEditingUser(null);
-            Alert.alert('Sucesso', 'Usuário atualizado.');
-        } catch (err) {
-            Alert.alert('Erro', 'Falha ao atualizar usuário.');
+            refetch();
+
+            if (Platform.OS === 'web') {
+                window.alert('Usuário atualizado com sucesso.');
+            } else {
+                Alert.alert('Sucesso', 'Usuário atualizado.');
+            }
+        } catch (err: any) {
+            console.error('Erro no catch do update:', err);
+            const msg = `Falha ao atualizar usuário: ${err.message || String(err)}`;
+            if (Platform.OS === 'web') window.alert(msg);
+            else Alert.alert('Erro', msg);
         }
     };
 
