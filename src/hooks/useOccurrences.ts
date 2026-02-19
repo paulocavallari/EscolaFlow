@@ -3,7 +3,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Platform } from 'react-native';
-import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import {
     Occurrence,
     OccurrenceWithRelations,
@@ -145,62 +145,59 @@ export function useAddAction() {
 export function useProcessAudio() {
     return useMutation({
         mutationFn: async (audioUri: string): Promise<AudioProcessingResult> => {
-            // Build FormData with the recorded audio file
-            const formData = new FormData();
+            // Convert audio to base64 and send as JSON.
+            // This avoids FormData multipart issues and lets supabase.functions.invoke
+            // handle all auth headers (anon key + JWT) automatically and correctly.
+            let audioBase64: string;
+            let mimeType: string;
 
             if (Platform.OS === 'web') {
-                // On Web: fetch blob from the blob: URI
+                // Web: audioUri is a blob: URL
                 const blobResponse = await fetch(audioUri);
                 const blob = await blobResponse.blob();
-                formData.append('audio', blob, 'recording.m4a');
+                mimeType = blob.type || 'audio/webm';
+
+                const arrayBuffer = await blob.arrayBuffer();
+                const uint8 = new Uint8Array(arrayBuffer);
+                // Convert to base64 in chunks to avoid call stack overflow on large files
+                const chunkSize = 8192;
+                let binary = '';
+                for (let i = 0; i < uint8.length; i += chunkSize) {
+                    binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
+                }
+                audioBase64 = btoa(binary);
             } else {
-                // On Native: pass the file object directly
-                formData.append('audio', {
-                    uri: audioUri,
-                    type: 'audio/m4a',
-                    name: 'recording.m4a',
-                } as any);
+                // Native: audioUri is a file:// path — read it via fetch (RN supports this)
+                const fileResponse = await fetch(audioUri);
+                const blob = await fileResponse.blob();
+                mimeType = 'audio/mp4';
+
+                const arrayBuffer = await blob.arrayBuffer();
+                const uint8 = new Uint8Array(arrayBuffer);
+                const chunkSize = 8192;
+                let binary = '';
+                for (let i = 0; i < uint8.length; i += chunkSize) {
+                    binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
+                }
+                audioBase64 = btoa(binary);
             }
 
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                throw new Error('User is not authenticated');
-            }
-
-            const functionUrl = `${supabaseUrl}/functions/v1/process-audio`;
-
-            // Use native fetch so FormData is sent as proper multipart/form-data
-            // (supabase.functions.invoke serializes FormData as JSON, breaking the upload)
-            const response = await fetch(functionUrl, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
-                    'apikey': supabaseAnonKey,
-                    // Do NOT set Content-Type — fetch sets it automatically with the correct boundary
-                },
-                body: formData,
+            // supabase.functions.invoke handles anon key + JWT auth automatically
+            const { data, error } = await supabase.functions.invoke('process-audio', {
+                body: { audio: audioBase64, mimeType },
             });
 
-            let responseData: any;
-            try {
-                responseData = await response.json();
-            } catch {
-                throw new Error(`Audio processing failed: invalid response (status ${response.status})`);
+            if (error) {
+                console.error('Process audio invoke error:', error);
+                throw new Error(error.message || 'Audio processing failed');
             }
 
-            if (!response.ok) {
-                const message = responseData?.error ?? responseData?.details ?? 'Audio processing failed';
-                console.error('Process audio error:', message, responseData);
-                throw new Error(message);
+            if (data?.error && !data?.original) {
+                console.error('Process audio returned error:', data.error);
+                throw new Error(data.error);
             }
 
-            // Edge function may return 200 with an error field on partial failures
-            if (responseData?.error && !responseData?.original) {
-                console.error('Process audio returned error:', responseData.error);
-                throw new Error(responseData.error);
-            }
-
-            return responseData as AudioProcessingResult;
+            return data as AudioProcessingResult;
         },
     });
 }

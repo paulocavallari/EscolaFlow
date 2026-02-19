@@ -4,7 +4,6 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { encode as base64Encode } from 'https://deno.land/std@0.177.0/encoding/base64.ts';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -41,12 +40,13 @@ serve(async (req: Request) => {
             });
         }
 
-        // Parse multipart form data with audio file
-        const formData = await req.formData();
-        const audioFile = formData.get('audio') as File;
+        // Accept JSON body with base64 audio (sent by supabase.functions.invoke)
+        const body = await req.json();
+        const audioBase64: string = body.audio;
+        const mimeType: string = body.mimeType || 'audio/mp4';
 
-        if (!audioFile) {
-            return new Response(JSON.stringify({ error: 'No audio file provided' }), {
+        if (!audioBase64) {
+            return new Response(JSON.stringify({ error: 'No audio data provided' }), {
                 status: 400,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
@@ -60,16 +60,7 @@ serve(async (req: Request) => {
             });
         }
 
-        // Convert audio to base64 for Gemini's inline_data
-        const audioBuffer = await audioFile.arrayBuffer();
-        const audioBase64 = base64Encode(new Uint8Array(audioBuffer));
-
-        // Determine MIME type (m4a is audio/mp4 for Gemini)
-        const mimeType = audioFile.type && audioFile.type !== 'application/octet-stream'
-            ? audioFile.type
-            : 'audio/mp4';
-
-        console.log(`Processing audio: size=${audioBuffer.byteLength} bytes, mimeType=${mimeType}`);
+        console.log(`Processing audio: base64Length=${audioBase64.length}, mimeType=${mimeType}`);
 
         // ---- Step 1: Transcribe audio with Gemini (multimodal) ----
         const transcriptionResponse = await fetch(
