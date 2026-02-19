@@ -1,5 +1,5 @@
 // supabase/functions/send-whatsapp/index.ts
-// Edge Function: WhatsApp Notification via Meta Cloud API
+// Edge Function: WhatsApp Notification via Evolution API
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -20,60 +20,53 @@ interface NotificationPayload {
     new_status?: string;
 }
 
-async function sendWhatsAppMessage(
+/**
+ * Send a text message via Evolution API
+ */
+async function sendEvolutionMessage(
     phoneNumber: string,
-    templateName: string,
-    parameters: string[],
+    text: string,
 ): Promise<{ success: boolean; error?: string }> {
-    const whatsappToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN');
-    const phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
+    const apiUrl = Deno.env.get('EVOLUTION_API_URL');
+    const apiKey = Deno.env.get('EVOLUTION_API_KEY');
+    const instance = Deno.env.get('EVOLUTION_INSTANCE_NAME') ?? 'zap';
 
-    if (!whatsappToken || !phoneNumberId) {
-        console.warn('WhatsApp credentials not configured');
-        return { success: false, error: 'WhatsApp credentials not configured' };
+    if (!apiUrl || !apiKey) {
+        console.warn('Evolution API credentials not configured');
+        return { success: false, error: 'Evolution API credentials not configured' };
     }
 
+    // Ensure phone starts with country code (55 for Brazil)
+    const cleaned = phoneNumber.replace(/\D/g, '');
+    const formattedPhone = cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
+
+    const url = `${apiUrl}/message/sendText/${instance}`;
+    console.log(`Sending WhatsApp to ${formattedPhone} via ${url}`);
+
     try {
-        const response = await fetch(
-            `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
-            {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${whatsappToken}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    messaging_product: 'whatsapp',
-                    to: phoneNumber,
-                    type: 'template',
-                    template: {
-                        name: templateName,
-                        language: { code: 'pt_BR' },
-                        components: [
-                            {
-                                type: 'body',
-                                parameters: parameters.map((text) => ({
-                                    type: 'text',
-                                    text,
-                                })),
-                            },
-                        ],
-                    },
-                }),
+        // Evolution API v2: only 'number' and 'textMessage' are required
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': apiKey,
             },
-        );
+            body: JSON.stringify({
+                number: formattedPhone,
+                textMessage: { text },
+            }),
+        });
+
+        const responseText = await response.text();
+        console.log(`Evolution API response (${response.status}):`, responseText);
 
         if (!response.ok) {
-            const errBody = await response.text();
-            console.error('WhatsApp API error:', errBody);
-            return { success: false, error: errBody };
+            return { success: false, error: `HTTP ${response.status}: ${responseText}` };
         }
 
-        const data = await response.json();
-        console.log('WhatsApp message sent:', data);
         return { success: true };
     } catch (error) {
-        console.error('WhatsApp send error:', error);
+        console.error('Evolution API send error:', error);
         return { success: false, error: String(error) };
     }
 }
@@ -87,7 +80,7 @@ serve(async (req: Request) => {
         const payload: NotificationPayload = await req.json();
         console.log('Received notification payload:', payload);
 
-        // Create admin client for querying profiles
+        // Admin client for querying profiles without RLS
         const supabaseAdmin = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -114,7 +107,7 @@ serve(async (req: Request) => {
         // Fetch student name
         const { data: student } = await supabaseAdmin
             .from('students')
-            .select('name')
+            .select('name, class:classes!students_class_id_fkey(name)')
             .eq('id', payload.student_id)
             .single();
 
@@ -123,17 +116,16 @@ serve(async (req: Request) => {
 
         // ---- Event: Occurrence Created ----
         if (payload.event === 'occurrence_created') {
-            // Notify the tutor (if tutor != author)
+            // Notify the tutor (responsible) if they have a phone and are not the author
             if (tutor && tutor.id !== payload.author_id && tutor.whatsapp_number) {
-                const result = await sendWhatsAppMessage(
-                    tutor.whatsapp_number,
-                    'nova_ocorrencia', // Pre-approved WhatsApp template name
-                    [
-                        tutor.full_name,
-                        studentName,
-                        author?.full_name ?? 'Professor',
-                    ],
-                );
+                const message =
+                    `📋 *Nova Ocorrência Escolar*\n\n` +
+                    `Olá, ${tutor.full_name}!\n\n` +
+                    `Uma nova ocorrência foi registrada pelo(a) Prof(a). ${author?.full_name ?? 'Professor'}.\n\n` +
+                    `*Aluno:* ${studentName}\n\n` +
+                    `Acesse o app EscolaFlow para ver os detalhes e registrar a tratativa.`;
+
+                const result = await sendEvolutionMessage(tutor.whatsapp_number, message);
                 results.push({ recipient: 'tutor', ...result });
             }
         }
@@ -143,26 +135,24 @@ serve(async (req: Request) => {
             const newStatus = payload.new_status;
 
             // Notify author when occurrence is concluded or escalated
-            if (
-                (newStatus === 'CONCLUDED' || newStatus === 'ESCALATED_VP') &&
-                author?.whatsapp_number
-            ) {
+            if ((newStatus === 'CONCLUDED' || newStatus === 'ESCALATED_VP') && author?.whatsapp_number) {
                 const statusLabel =
-                    newStatus === 'CONCLUDED' ? 'Concluída' : 'Encaminhada à Vice-Direção';
+                    newStatus === 'CONCLUDED'
+                        ? '✅ Concluída'
+                        : '⬆️ Encaminhada à Vice-Direção';
 
-                const result = await sendWhatsAppMessage(
-                    author.whatsapp_number,
-                    'status_ocorrencia', // Pre-approved WhatsApp template name
-                    [
-                        author.full_name,
-                        studentName,
-                        statusLabel,
-                    ],
-                );
+                const message =
+                    `📋 *Atualização de Ocorrência*\n\n` +
+                    `Olá, ${author.full_name}!\n\n` +
+                    `A ocorrência do(a) aluno(a) *${studentName}* foi atualizada.\n\n` +
+                    `*Novo status:* ${statusLabel}\n\n` +
+                    `Acesse o app EscolaFlow para mais detalhes.`;
+
+                const result = await sendEvolutionMessage(author.whatsapp_number, message);
                 results.push({ recipient: 'author', ...result });
             }
 
-            // Notify vice-director(s) when escalated
+            // Notify all vice-directors when escalated
             if (newStatus === 'ESCALATED_VP') {
                 const { data: vps } = await supabaseAdmin
                     .from('profiles')
@@ -173,21 +163,21 @@ serve(async (req: Request) => {
                 if (vps) {
                     for (const vp of vps) {
                         if (vp.whatsapp_number) {
-                            const result = await sendWhatsAppMessage(
-                                vp.whatsapp_number,
-                                'ocorrencia_escalada', // Pre-approved WhatsApp template name
-                                [
-                                    vp.full_name,
-                                    studentName,
-                                    author?.full_name ?? 'Professor',
-                                ],
-                            );
+                            const message =
+                                `🔔 *Ocorrência Encaminhada para a Vice-Direção*\n\n` +
+                                `Olá, ${vp.full_name}!\n\n` +
+                                `Uma ocorrência do(a) aluno(a) *${studentName}* foi encaminhada para sua análise pelo(a) Prof(a). ${author?.full_name ?? 'Professor'}.\n\n` +
+                                `Acesse o app EscolaFlow para visualizar e tratar.`;
+
+                            const result = await sendEvolutionMessage(vp.whatsapp_number, message);
                             results.push({ recipient: `vp_${vp.id}`, ...result });
                         }
                     }
                 }
             }
         }
+
+        console.log('Notification results:', results);
 
         return new Response(JSON.stringify({ success: true, results }), {
             status: 200,

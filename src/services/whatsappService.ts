@@ -1,8 +1,10 @@
-import { Alert } from 'react-native';
-// Force reload of WhatsApp service
+// src/services/whatsappService.ts
+// WhatsApp messaging via Evolution API
 
-const API_URL = process.env.EVOLUTION_API_URL || 'http://137.131.213.8:8080';
-const API_KEY = process.env.EVOLUTION_API_KEY || 'Pa7412365**';
+// EXPO_PUBLIC_ prefix is required for variables to be bundled into the Expo client
+const API_URL = process.env.EXPO_PUBLIC_EVOLUTION_API_URL ?? 'http://137.131.213.8:8080';
+const API_KEY = process.env.EXPO_PUBLIC_EVOLUTION_API_KEY ?? 'Pa7412365**';
+const INSTANCE = process.env.EXPO_PUBLIC_EVOLUTION_INSTANCE_NAME ?? 'zap';
 
 interface SendMessageResponse {
     key: {
@@ -28,27 +30,22 @@ export async function sendWhatsAppMessage(phone: string, text: string): Promise<
         }
 
         const formattedPhone = formatPhone(phone);
-        const url = `${API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE_NAME || 'zap'}`;
+        const url = `${API_URL}/message/sendText/${INSTANCE}`;
 
-        console.log('Sending WhatsApp to:', url, formattedPhone);
+        console.log('Sending WhatsApp to:', url, 'number:', formattedPhone);
 
+        // Evolution API v2: body must contain only 'number' and 'textMessage'
+        // Adding extra fields like 'options' causes a 400 Bad Request
         const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'apikey': API_KEY
+                'apikey': API_KEY,
             },
             body: JSON.stringify({
                 number: formattedPhone,
-                options: {
-                    delay: 1200,
-                    presence: "composing",
-                    linkPreview: false
-                },
-                textMessage: {
-                    text: text
-                }
-            })
+                textMessage: { text },
+            }),
         });
 
         const textResponse = await response.text();
@@ -69,7 +66,7 @@ export async function sendWhatsAppMessage(phone: string, text: string): Promise<
 
 export async function fetchInstances(): Promise<any> {
     try {
-        const url = `${API_URL}/instance/fetch`;
+        const url = `${API_URL}/instance/fetchInstances`;
         console.log('Fetching instances from:', url);
 
         const response = await fetch(url, {
