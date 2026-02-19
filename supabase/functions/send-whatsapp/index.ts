@@ -18,6 +18,7 @@ interface NotificationPayload {
     status?: string;
     old_status?: string;
     new_status?: string;
+    resolution_text?: string;
 }
 
 /**
@@ -116,67 +117,33 @@ serve(async (req: Request) => {
 
         // ---- Event: Occurrence Created ----
         if (payload.event === 'occurrence_created') {
-            // Notify the tutor (responsible) if they have a phone and are not the author
-            if (tutor && tutor.id !== payload.author_id && tutor.whatsapp_number) {
+            // 1. Ocorrência cadastrada -> Notificar apenas o Tutor do aluno
+            if (tutor && tutor.whatsapp_number) {
                 const message =
-                    `📋 *Nova Ocorrência Escolar*\n\n` +
+                    `🔔 *Nova Ocorrência Escolar*\n\n` +
                     `Olá, ${tutor.full_name}!\n\n` +
-                    `Uma nova ocorrência foi registrada pelo(a) Prof(a). ${author?.full_name ?? 'Professor'}.\n\n` +
-                    `*Aluno:* ${studentName}\n\n` +
-                    `Acesse o app EscolaFlow para ver os detalhes e registrar a tratativa.`;
+                    `O(a) Prof(a). ${author?.full_name ?? 'Professor'} registrou uma nova ocorrência para o seu aluno tutorado *${studentName}*.\n\n` +
+                    `Acesse o app EscolaFlow para visualizar os detalhes e tomar as providências necessárias.`;
 
                 const result = await sendEvolutionMessage(tutor.whatsapp_number, message);
                 results.push({ recipient: 'tutor', ...result });
-            }
-
-            // ALSO notify VPs
-            const { data: vps } = await supabaseAdmin
-                .from('profiles')
-                .select('id, full_name, whatsapp_number')
-                .eq('role', 'vice_director')
-                .not('whatsapp_number', 'is', null);
-
-            if (vps) {
-                for (const vp of vps) {
-                    if (vp.whatsapp_number) {
-                        const message =
-                            `🔔 *Nova Ocorrência Escolar Registrada*\n\n` +
-                            `Olá, ${vp.full_name}!\n\n` +
-                            `O(a) Prof(a). ${author?.full_name ?? 'Professor'} acabou de registrar uma nova ocorrência para o(a) aluno(a) *${studentName}*.\n\n` +
-                            (tutor ? `O tutor responsável foi notificado.\n` : `Esta ocorrência NÃO possui um tutor atribuído e necessita de sua intervenção rápida.\n`) +
-                            `Acesse o app EscolaFlow para acompanhar.`;
-
-                        const result = await sendEvolutionMessage(vp.whatsapp_number, message);
-                        results.push({ recipient: `vp_created_${vp.id}`, ...result });
-                    }
-                }
             }
         }
 
         // ---- Event: Status Changed ----
         if (payload.event === 'status_changed') {
             const newStatus = payload.new_status;
+            const oldStatus = payload.old_status;
+            const resolutionText = payload.resolution_text || 'Resolução não fornecida.';
 
-            // Notify author when occurrence is concluded or escalated
-            if ((newStatus === 'CONCLUDED' || newStatus === 'ESCALATED_VP') && author?.whatsapp_number) {
-                const statusLabel =
-                    newStatus === 'CONCLUDED'
-                        ? '✅ Concluída'
-                        : '⬆️ Encaminhada à Vice-Direção';
-
-                const message =
-                    `📋 *Atualização de Ocorrência*\n\n` +
-                    `Olá, ${author.full_name}!\n\n` +
-                    `A ocorrência do(a) aluno(a) *${studentName}* foi atualizada.\n\n` +
-                    `*Novo status:* ${statusLabel}\n\n` +
-                    `Acesse o app EscolaFlow para mais detalhes.`;
-
-                const result = await sendEvolutionMessage(author.whatsapp_number, message);
-                results.push({ recipient: 'author', ...result });
-            }
-
-            // Notify all vice-directors when escalated
+            // 2. Ocorrência encaminhada para VP -> Notificar Autor e VPs
             if (newStatus === 'ESCALATED_VP') {
+                if (author?.whatsapp_number) {
+                    const messageAutor = `🔄 *Ocorrência Escalonada*\n\nSua ocorrência referente ao aluno *${studentName}* foi escalonada para a Vice-Direção.\n\nVocê será notificado assim que houver uma resolução.`;
+                    const r1 = await sendEvolutionMessage(author.whatsapp_number, messageAutor);
+                    results.push({ recipient: 'author_escalated', ...r1 });
+                }
+
                 const { data: vps } = await supabaseAdmin
                     .from('profiles')
                     .select('id, full_name, whatsapp_number')
@@ -186,15 +153,37 @@ serve(async (req: Request) => {
                 if (vps) {
                     for (const vp of vps) {
                         if (vp.whatsapp_number) {
-                            const message =
-                                `🔔 *Ocorrência Encaminhada para a Vice-Direção*\n\n` +
-                                `Olá, ${vp.full_name}!\n\n` +
-                                `Uma ocorrência do(a) aluno(a) *${studentName}* foi encaminhada para sua análise pelo(a) Prof(a). ${author?.full_name ?? 'Professor'}.\n\n` +
-                                `Acesse o app EscolaFlow para visualizar e tratar.`;
-
-                            const result = await sendEvolutionMessage(vp.whatsapp_number, message);
-                            results.push({ recipient: `vp_${vp.id}`, ...result });
+                            const messageVp =
+                                `🏢 *Ocorrência Encaminhada*\n\nOlá, ${vp.full_name}!\n\nUma ocorrência do(a) aluno(a) *${studentName}* (registrada por ${author?.full_name ?? 'Professor'}) foi encaminhada para sua análise.\nAcesse o app EscolaFlow.`;
+                            const r2 = await sendEvolutionMessage(vp.whatsapp_number, messageVp);
+                            results.push({ recipient: `vp_${vp.id}`, ...r2 });
                         }
+                    }
+                }
+            }
+
+            // 3. Ocorrência marcada como concluída
+            if (newStatus === 'CONCLUDED') {
+                // Concluída pelo VP (was ESCALATED_VP)
+                if (oldStatus === 'ESCALATED_VP') {
+                    const message = `✅ *Ocorrência Concluída (Vice-Direção)*\n\nA ocorrência do aluno *${studentName}* foi resolvida pela Vice-Direção.\n\n*Resumo da Resolução:*\n${resolutionText}`;
+
+                    if (author?.whatsapp_number) {
+                        const r1 = await sendEvolutionMessage(author.whatsapp_number, message);
+                        results.push({ recipient: 'author_concluded_vp', ...r1 });
+                    }
+                    if (tutor?.whatsapp_number) {
+                        const r2 = await sendEvolutionMessage(tutor.whatsapp_number, message);
+                        results.push({ recipient: 'tutor_concluded_vp', ...r2 });
+                    }
+                }
+                // Concluída pelo Tutor (was PENDING_TUTOR)
+                else {
+                    const message = `✅ *Ocorrência Concluída (Tutor)*\n\nA ocorrência do aluno *${studentName}* que você registrou foi resolvida pelo tutor responsável.\n\n*Resumo da Resolução:*\n${resolutionText}`;
+
+                    if (author?.whatsapp_number) {
+                        const r1 = await sendEvolutionMessage(author.whatsapp_number, message);
+                        results.push({ recipient: 'author_concluded_tutor', ...r1 });
                     }
                 }
             }

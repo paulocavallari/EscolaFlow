@@ -11,12 +11,13 @@ import {
     TextInput,
     Alert,
     ActivityIndicator,
+    Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { AudioRecorder } from '../../../src/components/AudioRecorder';
 import { AIReviewModal } from '../../../src/components/AIReviewModal';
 import { useStudentsList, useClassesList } from '../../../src/hooks/useStudents';
-import { useCreateOccurrence, useProcessAudio } from '../../../src/hooks/useOccurrences';
+import { useCreateOccurrence, useProcessAudio, useProcessText } from '../../../src/hooks/useOccurrences';
 import { useProfile } from '../../../src/hooks/useProfile';
 import { COLORS } from '../../../src/lib/constants';
 import { Student, StudentWithRelations } from '../../../src/types/database';
@@ -44,6 +45,7 @@ export default function CreateOccurrenceScreen() {
     const { data: classes } = useClassesList();
     const { data: students } = useStudentsList(selectedClassId || undefined);
     const processAudio = useProcessAudio();
+    const processText = useProcessText();
     const createOccurrence = useCreateOccurrence();
 
     // Filter students by search
@@ -70,10 +72,37 @@ export default function CreateOccurrenceScreen() {
         }
     }, [processAudio]);
 
+    // Step 2: Input Mode
+    const [inputMode, setInputMode] = useState<'audio' | 'text'>('audio');
+    const [manualText, setManualText] = useState('');
+
+    const handleTextProcess = async () => {
+        if (!manualText.trim()) {
+            if (Platform.OS === 'web') window.alert('Digite algo primeiro.');
+            else Alert.alert('Aviso', 'Por favor, digite os detalhes da ocorrência.');
+            return;
+        }
+
+        try {
+            const result = await processText.mutateAsync(manualText);
+            setOriginalText(result.original);
+            setFormalText(result.formal);
+            setShowReviewModal(true);
+        } catch (err) {
+            console.error('Text processing error:', err);
+            Alert.alert(
+                'Erro no processamento',
+                err instanceof Error ? err.message : 'Falha ao processar texto.',
+                [{ text: 'OK' }]
+            );
+        }
+    };
+
     // Cancel processing and reset so user can re-record
     const handleCancelProcessing = useCallback(() => {
         processAudio.reset();
-    }, [processAudio]);
+        processText.reset();
+    }, [processAudio, processText]);
 
     // Handle AI review confirmation
     const handleConfirmText = useCallback(async (editedText: string) => {
@@ -138,7 +167,7 @@ export default function CreateOccurrenceScreen() {
                             <Text style={styles.progressDotText}>{i + 1}</Text>
                         </View>
                         <Text style={[styles.progressLabel, step === s && styles.progressLabelActive]}>
-                            {['Aluno', 'Gravar', 'Revisar'][i]}
+                            {['Aluno', 'Relato (IA)', 'Revisar'][i]}
                         </Text>
                     </View>
                 ))}
@@ -213,25 +242,72 @@ export default function CreateOccurrenceScreen() {
                 </View>
             )}
 
-            {/* Step 2: Record Audio */}
+            {/* Step 2: Record Audio or Type Text */}
             {step === 'record_audio' && (
                 <View style={styles.stepContent}>
-                    <Text style={styles.stepTitle}>Gravar Ocorrência</Text>
+                    <Text style={styles.stepTitle}>Detalhes da Ocorrência</Text>
                     <Text style={styles.stepSubtitle}>
-                        Aluno: {selectedStudent?.name}
+                        Aluno(a): {selectedStudent?.name}
                     </Text>
 
-                    <AudioRecorder
-                        onRecordingComplete={handleRecordingComplete}
-                        isProcessing={processAudio.isPending}
-                        onCancelProcessing={handleCancelProcessing}
-                    />
+                    <View style={styles.tabsContainer}>
+                        <TouchableOpacity
+                            style={[styles.tabButton, inputMode === 'audio' && styles.tabButtonActive]}
+                            onPress={() => setInputMode('audio')}
+                        >
+                            <Text style={[styles.tabText, inputMode === 'audio' && styles.tabTextActive]}>🎙️ Áudio</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.tabButton, inputMode === 'text' && styles.tabButtonActive]}
+                            onPress={() => setInputMode('text')}
+                        >
+                            <Text style={[styles.tabText, inputMode === 'text' && styles.tabTextActive]}>✍️ Texto</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {inputMode === 'audio' ? (
+                        <AudioRecorder
+                            onRecordingComplete={handleRecordingComplete}
+                            isProcessing={processAudio.isPending}
+                            onCancelProcessing={handleCancelProcessing}
+                        />
+                    ) : (
+                        <View style={styles.textInputContainer}>
+                            <TextInput
+                                style={styles.textInputArea}
+                                placeholder="Descreva os detalhes da ocorrência..."
+                                placeholderTextColor={COLORS.textMuted}
+                                value={manualText}
+                                onChangeText={setManualText}
+                                multiline
+                                textAlignVertical="top"
+                            />
+
+                            {processText.isPending ? (
+                                <View style={styles.processingTextContainer}>
+                                    <ActivityIndicator size="small" color={COLORS.primary} />
+                                    <Text style={styles.processingLabel}>I.A. Reescrevendo relato...</Text>
+
+                                    <TouchableOpacity style={styles.cancelButton} onPress={handleCancelProcessing}>
+                                        <Text style={styles.cancelText}>Cancelar</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                <TouchableOpacity
+                                    style={styles.processTextButton}
+                                    onPress={handleTextProcess}
+                                >
+                                    <Text style={styles.processTextButtonLabel}>✨ Formatar Relato com I.A.</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    )}
 
                     <TouchableOpacity
                         style={styles.backButton}
                         onPress={() => setStep('select_student')}
                     >
-                        <Text style={styles.backButtonText}>← Voltar</Text>
+                        <Text style={styles.backButtonText}>← Voltar para seleção</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -414,5 +490,84 @@ const styles = StyleSheet.create({
         marginTop: 12,
         fontSize: 15,
         color: COLORS.textSecondary,
+    },
+    tabsContainer: {
+        flexDirection: 'row',
+        backgroundColor: COLORS.surface,
+        borderRadius: 12,
+        padding: 4,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: COLORS.border + '30',
+    },
+    tabButton: {
+        flex: 1,
+        paddingVertical: 10,
+        alignItems: 'center',
+        borderRadius: 8,
+    },
+    tabButtonActive: {
+        backgroundColor: COLORS.primary + '15',
+    },
+    tabText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: COLORS.textMuted,
+    },
+    tabTextActive: {
+        color: COLORS.primary,
+    },
+    textInputContainer: {
+        marginBottom: 16,
+    },
+    textInputArea: {
+        backgroundColor: COLORS.surface,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: COLORS.border + '50',
+        minHeight: 180,
+        padding: 16,
+        fontSize: 15,
+        color: COLORS.textPrimary,
+        lineHeight: 22,
+        marginBottom: 16,
+    },
+    processTextButton: {
+        backgroundColor: COLORS.primary,
+        borderRadius: 12,
+        paddingVertical: 16,
+        alignItems: 'center',
+    },
+    processTextButtonLabel: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: COLORS.white,
+    },
+    processingTextContainer: {
+        alignItems: 'center',
+        paddingVertical: 24,
+        backgroundColor: COLORS.surface,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: COLORS.border + '30',
+        borderStyle: 'dashed',
+    },
+    processingLabel: {
+        marginTop: 12,
+        fontSize: 14,
+        color: COLORS.primary,
+        fontWeight: '600',
+    },
+    cancelButton: {
+        marginTop: 12,
+        paddingVertical: 6,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        backgroundColor: COLORS.surfaceLight,
+    },
+    cancelText: {
+        color: COLORS.textSecondary,
+        fontSize: 12,
+        fontWeight: '600',
     },
 });

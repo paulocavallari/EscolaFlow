@@ -272,6 +272,57 @@ export function useProcessAudio() {
     });
 }
 
+// ---- Process Text ----
+export function useProcessText() {
+    return useMutation({
+        mutationFn: async (text: string): Promise<AudioProcessingResult> => { // Returns {original, formal} just like audio
+            const TIMEOUT_MS = 30_000; // 30 seconds for text parsing
+
+            console.log('[processText] Invoking Edge Function process-text via fetch...');
+
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token || supabaseAnonKey;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+            try {
+                const res = await fetch(`${supabaseUrl}/functions/v1/process-text`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ text }),
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+                const resText = await res.text();
+
+                let parsed = null;
+                try {
+                    parsed = JSON.parse(resText);
+                } catch (e) {
+                    throw new Error(`Invalid JSON response: ${resText.substring(0, 100)}`);
+                }
+
+                if (!res.ok) {
+                    const detailedError = parsed?.details || parsed?.error || `HTTP ${res.status}: ${JSON.stringify(parsed)}`;
+                    throw new Error(detailedError);
+                }
+
+                // Return {original, formal}
+                return parsed as AudioProcessingResult;
+            } catch (err: any) {
+                clearTimeout(timeoutId);
+                if (err.name === 'AbortError') throw new Error('O processamento do texto demorou muito. Tente novamente.');
+                throw err;
+            }
+        },
+    });
+}
+
 // ---- Occurrence Stats ----
 export function useOccurrenceStats() {
     return useQuery({
