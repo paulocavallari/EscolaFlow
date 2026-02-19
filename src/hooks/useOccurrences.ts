@@ -3,7 +3,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Platform } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase';
 import {
     Occurrence,
     OccurrenceWithRelations,
@@ -162,14 +162,11 @@ export function useProcessAudio() {
                 } as any);
             }
 
-            // Get the current session token for Authorization header
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
                 throw new Error('User is not authenticated');
             }
 
-            const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-            const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
             const functionUrl = `${supabaseUrl}/functions/v1/process-audio`;
 
             // Use native fetch so FormData is sent as proper multipart/form-data
