@@ -15,7 +15,7 @@ supabase secrets set GEMINI_API_KEY=AIzaSyAsMbfjl8IykI_Hz2PPJIvp2sSXey8HzbYy --p
 
 echo ""
 echo "🚀 Fazendo deploy da Edge Function process-audio..."
-supabase functions deploy process-audio --project-ref "$PROJECT_REF"
+supabase functions deploy process-audio --no-verify-jwt --project-ref "$PROJECT_REF"
 
 echo ""
 echo "✅ Deploy concluído com sucesso!"
