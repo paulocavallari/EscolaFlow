@@ -54,7 +54,10 @@ serve(async (req: Request) => {
 
         const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
         if (!geminiApiKey) {
-            return new Response(JSON.stringify({ error: 'Gemini API key not configured' }), {
+            return new Response(JSON.stringify({
+                error: 'Gemini API key not configured',
+                details: 'The environment variable GEMINI_API_KEY is missing in the Edge Function'
+            }), {
                 status: 500,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
@@ -195,9 +198,13 @@ Relato original:
             status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Process audio error:', error);
-        return new Response(JSON.stringify({ error: 'Internal server error' }), {
+        return new Response(JSON.stringify({
+            error: 'Internal server error',
+            details: error.message || String(error),
+            stack: error.stack
+        }), {
             status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
