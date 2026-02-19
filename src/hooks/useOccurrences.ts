@@ -3,7 +3,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Platform } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase';
 import {
     Occurrence,
     OccurrenceWithRelations,
@@ -190,28 +190,55 @@ export function useProcessAudio() {
 
             console.log('[processAudio] Base64 ready. length=', audioBase64.length, 'mimeType=', mimeType);
 
-            // supabase.functions.invoke handles anon key + JWT auth automatically
-            // Wrap with a timeout so we never hang indefinitely
+            // Use raw fetch instead of supabase.functions.invoke because invoke 
+            // swallows the JSON error body on 500 status codes.
             const TIMEOUT_MS = 90_000; // 90 seconds
 
-            console.log('[processAudio] Invoking Edge Function process-audio...');
-            const invokePromise = supabase.functions.invoke('process-audio', {
-                body: { audio: audioBase64, mimeType },
+            console.log('[processAudio] Invoking Edge Function process-audio via fetch...');
+
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token || supabaseAnonKey;
+
+            const invokePromise = fetch(`${supabaseUrl}/functions/v1/process-audio`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ audio: audioBase64, mimeType })
+            }).then(async (res) => {
+                const text = await res.text();
+                let parsed = null;
+                try {
+                    parsed = JSON.parse(text);
+                } catch (e) {
+                    throw new Error(`Invalid JSON response (status ${res.status}): ${text.substring(0, 100)}`);
+                }
+
+                if (!res.ok) {
+                    // This is where we catch the detailed 500 error from the Edge Function
+                    const detailedError = parsed?.details || parsed?.error || `HTTP ${res.status}: ${JSON.stringify(parsed)}`;
+                    throw new Error(detailedError);
+                }
+
+                return { data: parsed, error: null };
+            }).catch(error => {
+                return { data: null, error };
             });
 
-            const timeoutPromise = new Promise<never>((_, reject) =>
+            const timeoutPromise = new Promise<{ data: any; error: any }>((_, reject) =>
                 setTimeout(
                     () => reject(new Error('Tempo limite atingido. O servidor demorou demais para responder.')),
                     TIMEOUT_MS
                 )
             );
 
-            const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as Awaited<typeof invokePromise>;
+            const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
 
             console.log('[processAudio] Edge Function responded. error=', error, 'data keys=', data ? Object.keys(data) : null);
 
             if (error) {
-                console.error('Process audio invoke error:', error);
+                console.error('Process audio custom fetch error:', error);
                 throw new Error(error.message || 'Audio processing failed');
             }
 
