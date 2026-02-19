@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import { COLORS } from '../../../src/lib/constants';
 import { useProfilesList } from '../../../src/hooks/useStudents';
 import { useClassesList, useStudentsList } from '../../../src/hooks/useStudents';
-import { sendWhatsAppMessage, checkConnectionState } from '../../../src/services/whatsappService';
+import { sendWhatsAppMessage, fetchInstances } from '../../../src/services/whatsappService';
 
 interface AdminCardProps {
     icon: string;
@@ -75,20 +75,12 @@ export default function AdminHubScreen() {
     const handleCheckStatus = async () => {
         console.log('Verificando status da API...');
         try {
-            const result = await checkConnectionState();
-            console.log('Status recebido:', result);
+            const instances = await fetchInstances();
+            console.log('Instâncias recebidas:', instances);
 
-            if (result.success) {
-                const state = result.data?.instance?.state || result.data?.state || JSON.stringify(result.data);
-                const msg = `Conectado!\nInstância: ${process.env.EVOLUTION_INSTANCE_NAME || 'zap'}\nEstado: ${state}`;
-                if (Platform.OS === 'web') window.alert(msg);
-                else Alert.alert('Online', msg);
-            } else {
-                const msg = `Falha na conexão.\nStatus: ${result.status}\nResp: ${result.data || result.error}`;
-                if (Platform.OS === 'web') window.alert(msg);
-                else Alert.alert('Offline', msg);
-            }
-
+            const msg = `Conectado!\nInstâncias ativas: ${instances ? instances.length : 0}`;
+            if (Platform.OS === 'web') window.alert(msg);
+            else Alert.alert('Online', msg);
         } catch (err: any) {
             console.error('Erro no handler de status:', err);
             const errMsg = `Erro ao conectar: ${err.message}`;
