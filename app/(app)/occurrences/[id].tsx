@@ -44,14 +44,16 @@ export default function OccurrenceDetailScreen() {
     const [manualTreatmentText, setManualTreatmentText] = useState('');
     const processText = useProcessText();
 
-    const canTreat =
+    const canTreat = Boolean(
         occurrence &&
         profileId &&
+        occurrence.status !== OccurrenceStatus.CONCLUDED &&
         (
-            (occurrence.status === OccurrenceStatus.PENDING_TUTOR && occurrence.tutor_id === profileId) ||
+            occurrence.tutor_id === profileId ||
             role === UserRole.VICE_DIRECTOR ||
             role === UserRole.ADMIN
-        );
+        )
+    );
 
     // Handle recorded audio for treatment
     const handleTreatmentAudio = useCallback(async (audioUri: string) => {
