@@ -117,26 +117,42 @@ export default function CreateOccurrenceScreen() {
                 tutor_id: selectedStudent.tutor_id,
                 description_original: originalText,
                 description_formal: editedText,
+            }, {
+                onSuccess: (newOccurrence) => {
+                    // Send WhatsApp if Tutor has phone
+                    if (selectedStudent.tutor?.whatsapp_number) {
+                        const message = `*Nova Ocorrência Escolar*\n\nAluno: ${selectedStudent.name}\nTurma: ${selectedStudent.class?.name || 'N/A'}\n\nResumo: ${editedText}\n\nAcesse o app para mais detalhes.`;
+
+                        sendWhatsAppMessage(selectedStudent.tutor.whatsapp_number, message)
+                            .then(success => {
+                                if (success) console.log('WhatsApp notification sent');
+                                else console.warn('Failed to send WhatsApp notification');
+                            });
+                    } else {
+                        console.log('No tutor phone available for WhatsApp notification');
+                    }
+
+                    // Reset state
+                    setManualText('');
+                    setOriginalText('');
+                    setFormalText('');
+                    setStep('select_student');
+                    setSelectedStudent(null);
+
+                    Alert.alert('Sucesso', 'Ocorrência registrada com sucesso!', [
+                        {
+                            text: 'Ver Ocorrência',
+                            onPress: () => router.replace(`/(app)/occurrences/${newOccurrence.id}`)
+                        },
+                    ]);
+                },
+                onError: (err) => {
+                    Alert.alert('Erro', 'Falha ao salvar a ocorrência.');
+                }
             });
 
-            // Send WhatsApp if Tutor has phone
-            if (selectedStudent.tutor?.whatsapp_number) {
-                const message = `*Nova Ocorrência Escolar*\n\nAluno: ${selectedStudent.name}\nTurma: ${selectedStudent.class?.name || 'N/A'}\n\nResumo: ${editedText}\n\nAcesse o app para mais detalhes.`;
-
-                sendWhatsAppMessage(selectedStudent.tutor.whatsapp_number, message)
-                    .then(success => {
-                        if (success) console.log('WhatsApp notification sent');
-                        else console.warn('Failed to send WhatsApp notification');
-                    });
-            } else {
-                console.log('No tutor phone available for WhatsApp notification');
-            }
-
-            Alert.alert('Sucesso', 'Ocorrência registrada com sucesso!', [
-                { text: 'OK', onPress: () => router.back() },
-            ]);
         } catch (err) {
-            Alert.alert('Erro', 'Falha ao salvar a ocorrência.');
+            console.error('Error on create:', err);
         }
     }, [selectedStudent, profileId, originalText, createOccurrence]);
 
