@@ -114,7 +114,9 @@ export function useDeleteStudent() {
             const { error } = await supabase
                 .from('students')
                 .update({ active: false })
-                .eq('id', id);
+                .eq('id', id)
+                .select()
+                .single();
 
             if (error) throw error;
         },
@@ -238,7 +240,9 @@ export function useDeleteClass() {
             const { error } = await supabase
                 .from('classes')
                 .update({ active: false })
-                .eq('id', id);
+                .eq('id', id)
+                .select()
+                .single();
 
             if (error) throw error;
         },

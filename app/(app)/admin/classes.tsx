@@ -81,6 +81,7 @@ export default function ClassesScreen() {
                     setShowModal(false);
                     window.alert('Turma desativada.');
                 } catch (err) {
+                    console.error('Delete Class Error:', err);
                     window.alert('Falha ao desativar turma.');
                 }
             }
@@ -99,6 +100,7 @@ export default function ClassesScreen() {
                                 setShowModal(false);
                                 Alert.alert('Sucesso', 'Turma desativada.');
                             } catch (err) {
+                                console.error('Delete Class Error:', err);
                                 Alert.alert('Erro', 'Falha ao desativar turma.');
                             }
                         },

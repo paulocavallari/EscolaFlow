@@ -105,6 +105,7 @@ export default function StudentsScreen() {
                     setShowModal(false);
                     window.alert('Aluno desativado.');
                 } catch (err) {
+                    console.error('Delete Student Error:', err);
                     window.alert('Falha ao desativar aluno.');
                 }
             }
@@ -123,6 +124,7 @@ export default function StudentsScreen() {
                                 setShowModal(false);
                                 Alert.alert('Sucesso', 'Aluno desativado.');
                             } catch (err) {
+                                console.error('Delete Student Error:', err);
                                 Alert.alert('Erro', 'Falha ao desativar aluno.');
                             }
                         },
