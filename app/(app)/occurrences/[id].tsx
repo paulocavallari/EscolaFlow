@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useOccurrenceDetail, useAddAction, useProcessAudio, useDeleteOccurrence } from '../../../src/hooks/useOccurrences';
+import { generateOccurrencePDF } from '../../../src/utils/pdfGenerator';
 import { useProfile } from '../../../src/hooks/useProfile';
 import { StatusBadge } from '../../../src/components/StatusBadge';
 import { AudioRecorder } from '../../../src/components/AudioRecorder';
@@ -92,6 +93,16 @@ export default function OccurrenceDetailScreen() {
             );
         }
     }, [occurrence, deleteOccurrence]);
+
+    const handleExportPDF = async () => {
+        if (!occurrence) return;
+        try {
+            await generateOccurrencePDF(occurrence);
+        } catch (err) {
+            if (Platform.OS === 'web') window.alert('Erro ao gerar PDF.');
+            else Alert.alert('Erro', 'Falha ao exportar PDF.');
+        }
+    };
 
     // Submit treatment action
     const handleSubmitAction = useCallback(async (description: string) => {
@@ -307,6 +318,17 @@ export default function OccurrenceDetailScreen() {
                         onPress={handleDelete}
                     >
                         <Text style={styles.actionBtnText}>Excluir Ocorrência</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {occurrence.status === OccurrenceStatus.CONCLUDED && (
+                <View style={[styles.section, { borderTopWidth: 0, paddingBottom: 0, paddingTop: 10 }]}>
+                    <TouchableOpacity
+                        style={styles.actionBtn}
+                        onPress={handleExportPDF}
+                    >
+                        <Text style={styles.actionBtnText}>📄 Exportar Relatório em PDF</Text>
                     </TouchableOpacity>
                 </View>
             )}
