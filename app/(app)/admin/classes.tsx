@@ -11,8 +11,9 @@ import {
     StyleSheet,
     Alert,
     Modal,
+    Platform,
 } from 'react-native';
-import { useClassesList, useCreateClass, useUpdateClass } from '../../../src/hooks/useStudents';
+import { useClassesList, useCreateClass, useUpdateClass, useDeleteClass } from '../../../src/hooks/useStudents';
 import { Class } from '../../../src/types/database';
 import { COLORS } from '../../../src/lib/constants';
 
@@ -20,6 +21,7 @@ export default function ClassesScreen() {
     const { data: classes, isLoading } = useClassesList();
     const createClass = useCreateClass();
     const updateClass = useUpdateClass();
+    const deleteClass = useDeleteClass();
 
     const [showModal, setShowModal] = useState(false);
     const [editingClass, setEditingClass] = useState<Class | null>(null);
@@ -64,6 +66,45 @@ export default function ClassesScreen() {
             setShowModal(false);
         } catch (err) {
             Alert.alert('Erro', 'Falha ao salvar turma.');
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!editingClass) return;
+
+        const confirmMessage = `Deseja desativar a turma "${editingClass.name}"?`;
+
+        if (Platform.OS === 'web') {
+            if (window.confirm(confirmMessage)) {
+                try {
+                    await deleteClass.mutateAsync(editingClass.id);
+                    setShowModal(false);
+                    window.alert('Turma desativada.');
+                } catch (err) {
+                    window.alert('Falha ao desativar turma.');
+                }
+            }
+        } else {
+            Alert.alert(
+                'Confirmar exclusão',
+                confirmMessage,
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                        text: 'Desativar',
+                        style: 'destructive',
+                        onPress: async () => {
+                            try {
+                                await deleteClass.mutateAsync(editingClass.id);
+                                setShowModal(false);
+                                Alert.alert('Sucesso', 'Turma desativada.');
+                            } catch (err) {
+                                Alert.alert('Erro', 'Falha ao desativar turma.');
+                            }
+                        },
+                    },
+                ]
+            );
         }
     };
 
@@ -140,6 +181,15 @@ export default function ClassesScreen() {
                             placeholderTextColor={COLORS.textMuted}
                             keyboardType="numeric"
                         />
+
+                        {editingClass && (
+                            <TouchableOpacity
+                                style={styles.deleteButton}
+                                onPress={handleDelete}
+                            >
+                                <Text style={styles.deleteButtonText}>🗑️ Desativar Turma</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </View>
             </Modal>
@@ -227,4 +277,12 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: COLORS.border + '40',
     },
+    deleteButton: {
+        marginTop: 32,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: COLORS.error + '15',
+        alignItems: 'center',
+    },
+    deleteButtonText: { fontSize: 15, fontWeight: '600', color: COLORS.error },
 });

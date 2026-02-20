@@ -229,6 +229,25 @@ export function useUpdateClass() {
     });
 }
 
+export function useDeleteClass() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (id: string): Promise<void> => {
+            // Soft delete
+            const { error } = await supabase
+                .from('classes')
+                .update({ active: false })
+                .eq('id', id);
+
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: CLASS_KEYS.all });
+        },
+    });
+}
+
 // ============================================================
 // Profiles (Users)
 // ============================================================

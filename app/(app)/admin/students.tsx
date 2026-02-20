@@ -12,6 +12,7 @@ import {
     Alert,
     Modal,
     ScrollView,
+    Platform,
 } from 'react-native';
 import { useStudentsList, useCreateStudent, useUpdateStudent, useDeleteStudent, useClassesList, useTutorsList } from '../../../src/hooks/useStudents';
 import { CSVImporter } from '../../../src/components/CSVImporter';
@@ -88,28 +89,43 @@ export default function StudentsScreen() {
         }
     };
 
-    const handleDelete = () => {
+    const handleDelete = async () => {
         if (!editingStudent) return;
-        Alert.alert(
-            'Confirmar exclusão',
-            `Deseja desativar o aluno "${editingStudent.name}"?`,
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Desativar',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            await deleteStudent.mutateAsync(editingStudent.id);
-                            setShowModal(false);
-                            Alert.alert('Sucesso', 'Aluno desativado.');
-                        } catch (err) {
-                            Alert.alert('Erro', 'Falha ao desativar aluno.');
-                        }
+
+        const confirmMessage = `Deseja desativar o aluno "${editingStudent.name}"?`;
+
+        if (Platform.OS === 'web') {
+            if (window.confirm(confirmMessage)) {
+                try {
+                    await deleteStudent.mutateAsync(editingStudent.id);
+                    setShowModal(false);
+                    window.alert('Aluno desativado.');
+                } catch (err) {
+                    window.alert('Falha ao desativar aluno.');
+                }
+            }
+        } else {
+            Alert.alert(
+                'Confirmar exclusão',
+                confirmMessage,
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                        text: 'Desativar',
+                        style: 'destructive',
+                        onPress: async () => {
+                            try {
+                                await deleteStudent.mutateAsync(editingStudent.id);
+                                setShowModal(false);
+                                Alert.alert('Sucesso', 'Aluno desativado.');
+                            } catch (err) {
+                                Alert.alert('Erro', 'Falha ao desativar aluno.');
+                            }
+                        },
                     },
-                },
-            ]
-        );
+                ]
+            );
+        }
     };
 
     const renderStudent = ({ item }: { item: StudentWithRelations }) => (
