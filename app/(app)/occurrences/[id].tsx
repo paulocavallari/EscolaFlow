@@ -11,9 +11,10 @@ import {
     Alert,
     ActivityIndicator,
     Platform,
+    TextInput,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useOccurrenceDetail, useAddAction, useProcessAudio, useDeleteOccurrence } from '../../../src/hooks/useOccurrences';
+import { useOccurrenceDetail, useAddAction, useProcessAudio, useProcessText, useDeleteOccurrence } from '../../../src/hooks/useOccurrences';
 import { generateOccurrencePDF } from '../../../src/utils/pdfGenerator';
 import { useProfile } from '../../../src/hooks/useProfile';
 import { StatusBadge } from '../../../src/components/StatusBadge';
@@ -40,6 +41,8 @@ export default function OccurrenceDetailScreen() {
     const [treatmentFormal, setTreatmentFormal] = useState('');
     const [showReviewModal, setShowReviewModal] = useState(false);
     const [pendingActionType, setPendingActionType] = useState<'resolve' | 'escalate' | 'vp_resolve'>('resolve');
+    const [manualTreatmentText, setManualTreatmentText] = useState('');
+    const processText = useProcessText();
 
     const canTreat =
         occurrence &&
@@ -101,6 +104,24 @@ export default function OccurrenceDetailScreen() {
         } catch (err) {
             if (Platform.OS === 'web') window.alert('Erro ao gerar PDF.');
             else Alert.alert('Erro', 'Falha ao exportar PDF.');
+        }
+    };
+
+    // Handle text treatment
+    const handleTextSubmit = async () => {
+        if (!manualTreatmentText.trim()) {
+            if (Platform.OS === 'web') window.alert('Digite a providência primeiro.');
+            else Alert.alert('Aviso', 'Digite os detalhes da providência.');
+            return;
+        }
+        try {
+            const result = await processText.mutateAsync(manualTreatmentText);
+            setTreatmentOriginal(result.original);
+            setTreatmentFormal(result.formal);
+            setShowReviewModal(true);
+        } catch (err) {
+            console.error('Text processing error:', err);
+            Alert.alert('Erro', 'Falha ao processar texto.');
         }
     };
 
@@ -273,6 +294,29 @@ export default function OccurrenceDetailScreen() {
                         isProcessing={processAudio.isPending}
                     />
 
+                    <Text style={styles.orDivider}>- OU -</Text>
+
+                    <TextInput
+                        style={styles.textInput}
+                        multiline
+                        placeholder="Digite a providência tomada..."
+                        placeholderTextColor={COLORS.textMuted}
+                        value={manualTreatmentText}
+                        onChangeText={setManualTreatmentText}
+                    />
+
+                    <TouchableOpacity
+                        style={[styles.actionBtn, styles.textSubmitBtn, processText.isPending && { opacity: 0.7 }]}
+                        onPress={handleTextSubmit}
+                        disabled={processText.isPending}
+                    >
+                        {processText.isPending ? (
+                            <ActivityIndicator size="small" color={COLORS.white} />
+                        ) : (
+                            <Text style={styles.actionBtnText}>✨ Processar Texto com IA</Text>
+                        )}
+                    </TouchableOpacity>
+
                     {/* Action buttons */}
                     <View style={styles.actionButtons}>
                         {occurrence.status !== OccurrenceStatus.CONCLUDED && (
@@ -284,8 +328,8 @@ export default function OccurrenceDetailScreen() {
                                     );
                                     if (treatmentFormal) setShowReviewModal(true);
                                     else {
-                                        if (Platform.OS === 'web') window.alert('Grave o áudio primeiro.');
-                                        else Alert.alert('Atenção', 'Grave o áudio da providência primeiro.');
+                                        if (Platform.OS === 'web') window.alert('Grave o áudio ou digite o texto primeiro.');
+                                        else Alert.alert('Atenção', 'Grave o áudio ou digite a providência primeiro.');
                                     }
                                 }}
                             >
@@ -299,8 +343,8 @@ export default function OccurrenceDetailScreen() {
                                     setPendingActionType('escalate');
                                     if (treatmentFormal) setShowReviewModal(true);
                                     else {
-                                        if (Platform.OS === 'web') window.alert('Grave o áudio primeiro.');
-                                        else Alert.alert('Atenção', 'Grave o áudio primeiro.');
+                                        if (Platform.OS === 'web') window.alert('Grave o áudio ou digite o texto primeiro.');
+                                        else Alert.alert('Atenção', 'Grave o áudio ou digite o texto primeiro.');
                                     }
                                 }}
                             >
@@ -505,7 +549,26 @@ const styles = StyleSheet.create({
     timelineDescription: {
         fontSize: 14,
         color: COLORS.textPrimary,
-        lineHeight: 20,
+        lineHeight: 24,
+    },
+    orDivider: {
+        textAlign: 'center',
+        marginVertical: 16,
+        color: COLORS.textMuted,
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    textInput: {
+        backgroundColor: COLORS.surface,
+        borderRadius: 12,
+        padding: 16,
+        color: COLORS.textPrimary,
+        minHeight: 120,
+        textAlignVertical: 'top',
+        fontSize: 15,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: COLORS.border + '30',
     },
     treatmentPrompt: {
         backgroundColor: COLORS.primary + '10',
@@ -555,6 +618,10 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         borderRadius: 12,
         alignItems: 'center',
+    },
+    textSubmitBtn: {
+        backgroundColor: '#4E5BA6',
+        marginBottom: 20,
     },
     resolveBtn: {
         backgroundColor: COLORS.success,
