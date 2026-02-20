@@ -167,7 +167,7 @@ export async function generateOccurrencePDF(occurrence: OccurrenceWithRelations)
                 
                 <div class="footer row">
                     <span class="label">Telefone(s) para contato:</span>
-                    <span class="value" style="width: 70%;">${occurrence.tutor?.whatsapp_number || '_________________________________________'}</span>
+                    <span class="value" style="width: 70%;">____________________________________________________________________</span>
                 </div>
             </body>
             </html>
