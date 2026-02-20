@@ -63,11 +63,15 @@ export function useAuthProvider(): AuthState {
             if (s?.user) {
                 fetchProfile(s.user.id).then((p) => {
                     setProfile(p);
+                }).finally(() => {
                     setLoading(false);
                 });
             } else {
                 setLoading(false);
             }
+        }).catch((err) => {
+            console.error('Session get error:', err);
+            setLoading(false);
         });
 
         // Subscribe to auth changes
@@ -76,8 +80,13 @@ export function useAuthProvider(): AuthState {
                 setSession(s);
                 setUser(s?.user ?? null);
                 if (s?.user) {
-                    const p = await fetchProfile(s.user.id);
-                    setProfile(p);
+                    try {
+                        const p = await fetchProfile(s.user.id);
+                        setProfile(p);
+                    } catch (err) {
+                        console.error('Profile fetch error on state change:', err);
+                        setProfile(null);
+                    }
                 } else {
                     setProfile(null);
                 }

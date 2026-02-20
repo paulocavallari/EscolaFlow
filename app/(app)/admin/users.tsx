@@ -17,14 +17,14 @@ import {
 import { useProfilesList, useUpdateProfile } from '../../../src/hooks/useStudents';
 import { Profile, UserRole } from '../../../src/types/database';
 import { COLORS, ROLE_LABELS, ROLE_COLORS } from '../../../src/lib/constants';
-import { supabase } from '../../../src/lib/supabase';
+import { supabase, supabaseUrl } from '../../../src/lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 
 // WARNING: EXPOSING SERVICE ROLE KEY ON CLIENT IS DANGEROUS.
 // This is done here ONLY because network/Edge Functions are blocked and we need an internal admin tool.
 // Ensure this app is NOT distributed to public stores with this key.
 const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3aGpqc3hxb29nbWNhaXJlc3ViIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTQ0Njk5NSwiZXhwIjoyMDg3MDIyOTk1fQ.J8udRfSV5ovz5cnMbQvm36ZwIE6AV2fGJklsXyfPvcE';
-const adminSupabase = createClient(process.env.EXPO_PUBLIC_SUPABASE_URL!, SERVICE_ROLE_KEY, {
+const adminSupabase = createClient(supabaseUrl, SERVICE_ROLE_KEY, {
     auth: {
         autoRefreshToken: false,
         persistSession: false
