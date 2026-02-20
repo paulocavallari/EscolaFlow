@@ -139,12 +139,17 @@ export default function CreateOccurrenceScreen() {
                     setStep('select_student');
                     setSelectedStudent(null);
 
-                    Alert.alert('Sucesso', 'Ocorrência registrada com sucesso!', [
-                        {
-                            text: 'Ver Ocorrência',
-                            onPress: () => router.replace(`/(app)/occurrences/${newOccurrence.id}`)
-                        },
-                    ]);
+                    if (Platform.OS === 'web') {
+                        window.alert('Ocorrência registrada com sucesso!');
+                        router.replace(`/(app)/occurrences/${newOccurrence.id}`);
+                    } else {
+                        Alert.alert('Sucesso', 'Ocorrência registrada com sucesso!', [
+                            {
+                                text: 'Ver Ocorrência',
+                                onPress: () => router.replace(`/(app)/occurrences/${newOccurrence.id}`)
+                            },
+                        ]);
+                    }
                 },
                 onError: (err) => {
                     Alert.alert('Erro', 'Falha ao salvar a ocorrência.');

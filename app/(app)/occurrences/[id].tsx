@@ -154,9 +154,14 @@ export default function OccurrenceDetailScreen() {
                 newStatus,
             });
 
-            Alert.alert('Sucesso', 'Tratativa registrada com sucesso!', [
-                { text: 'OK', onPress: () => router.back() },
-            ]);
+            if (Platform.OS === 'web') {
+                window.alert('Tratativa registrada com sucesso!');
+                router.back();
+            } else {
+                Alert.alert('Sucesso', 'Tratativa registrada com sucesso!', [
+                    { text: 'OK', onPress: () => router.back() },
+                ]);
+            }
         } catch (err) {
             Alert.alert('Erro', 'Falha ao registrar a tratativa.');
         }
@@ -322,13 +327,16 @@ export default function OccurrenceDetailScreen() {
                         {occurrence.status !== OccurrenceStatus.CONCLUDED && (
                             <TouchableOpacity
                                 style={[styles.actionBtn, styles.resolveBtn]}
-                                onPress={() => {
+                                onPress={async () => {
                                     setPendingActionType(
                                         role === UserRole.VICE_DIRECTOR ? 'vp_resolve' : 'resolve'
                                     );
-                                    if (treatmentFormal) setShowReviewModal(true);
-                                    else {
-                                        if (Platform.OS === 'web') window.alert('Grave o áudio ou digite o texto primeiro.');
+                                    if (treatmentFormal) {
+                                        setShowReviewModal(true);
+                                    } else if (manualTreatmentText.trim()) {
+                                        await handleTextSubmit();
+                                    } else {
+                                        if (Platform.OS === 'web') window.alert('Grave o áudio ou digite o texto primeiro e processe.');
                                         else Alert.alert('Atenção', 'Grave o áudio ou digite a providência primeiro.');
                                     }
                                 }}
@@ -339,11 +347,14 @@ export default function OccurrenceDetailScreen() {
                         {occurrence.status === OccurrenceStatus.PENDING_TUTOR && role !== UserRole.VICE_DIRECTOR && (
                             <TouchableOpacity
                                 style={[styles.actionBtn, styles.escalateBtn]}
-                                onPress={() => {
+                                onPress={async () => {
                                     setPendingActionType('escalate');
-                                    if (treatmentFormal) setShowReviewModal(true);
-                                    else {
-                                        if (Platform.OS === 'web') window.alert('Grave o áudio ou digite o texto primeiro.');
+                                    if (treatmentFormal) {
+                                        setShowReviewModal(true);
+                                    } else if (manualTreatmentText.trim()) {
+                                        await handleTextSubmit();
+                                    } else {
+                                        if (Platform.OS === 'web') window.alert('Grave o áudio ou digite o texto primeiro e processe.');
                                         else Alert.alert('Atenção', 'Grave o áudio ou digite o texto primeiro.');
                                     }
                                 }}
