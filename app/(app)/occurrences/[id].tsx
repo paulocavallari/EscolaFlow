@@ -359,7 +359,7 @@ export default function OccurrenceDetailScreen() {
                                     }
                                 }}
                             >
-                                <Text style={styles.actionBtnText}>⬆️ Escalar para VP</Text>
+                                <Text style={styles.actionBtnText}>⬆️ Escalar para Vice-Direção</Text>
                             </TouchableOpacity>
                         )}
                     </View>
