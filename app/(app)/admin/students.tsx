@@ -32,6 +32,7 @@ export default function StudentsScreen() {
     const [editingStudent, setEditingStudent] = useState<StudentWithRelations | null>(null);
     const [name, setName] = useState('');
     const [matricula, setMatricula] = useState('');
+    const [guardianPhone, setGuardianPhone] = useState('');
     const [selectedClassId, setSelectedClassId] = useState('');
     const [selectedTutorId, setSelectedTutorId] = useState('');
     const [search, setSearch] = useState('');
@@ -55,6 +56,7 @@ export default function StudentsScreen() {
         setMatricula(student.matricula ?? '');
         setSelectedClassId(student.class_id);
         setSelectedTutorId(student.tutor_id ?? '');
+        setGuardianPhone(student.guardian_phone ?? '');
         setShowModal(true);
     };
 
@@ -72,6 +74,7 @@ export default function StudentsScreen() {
                     matricula: matricula.trim() || null,
                     class_id: selectedClassId,
                     tutor_id: selectedTutorId || null,
+                    guardian_phone: guardianPhone.trim() || null,
                 });
                 Alert.alert('Sucesso', 'Aluno atualizado.');
             } else {
@@ -80,6 +83,7 @@ export default function StudentsScreen() {
                     matricula: matricula.trim() || null,
                     class_id: selectedClassId,
                     tutor_id: selectedTutorId || null,
+                    guardian_phone: guardianPhone.trim() || null,
                 });
                 Alert.alert('Sucesso', 'Aluno criado.');
             }
@@ -141,6 +145,7 @@ export default function StudentsScreen() {
                 <Text style={styles.cardName}>{item.name}</Text>
                 <Text style={styles.cardSub}>
                     {item.class?.name ?? 'Sem turma'} • {item.matricula ?? 'Sem matrícula'}
+                    {item.guardian_phone ? ` • WhatsApp Pai: ${item.guardian_phone}` : ''}
                 </Text>
                 {item.tutor && (
                     <Text style={styles.cardTutor}>Tutor: {item.tutor.full_name}</Text>
@@ -227,6 +232,16 @@ export default function StudentsScreen() {
                             onChangeText={setMatricula}
                             placeholder="Código de matrícula"
                             placeholderTextColor={COLORS.textMuted}
+                        />
+
+                        <Text style={styles.fieldLabel}>WhatsApp Responsável (Notificação)</Text>
+                        <TextInput
+                            style={styles.fieldInput}
+                            value={guardianPhone}
+                            onChangeText={setGuardianPhone}
+                            placeholder="5511999999999 (Código DDD)"
+                            placeholderTextColor={COLORS.textMuted}
+                            keyboardType="phone-pad"
                         />
 
                         <Text style={styles.fieldLabel}>Turma</Text>

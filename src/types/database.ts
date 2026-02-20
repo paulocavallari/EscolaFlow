@@ -53,6 +53,7 @@ export interface Student {
     matricula: string | null;
     class_id: string;
     tutor_id: string | null;
+    guardian_phone?: string | null;
     active: boolean;
     created_at: string;
     updated_at: string;
@@ -121,6 +122,7 @@ export interface StudentInsert {
     matricula?: string | null;
     class_id: string;
     tutor_id?: string | null;
+    guardian_phone?: string | null;
 }
 
 export interface OccurrenceInsert {

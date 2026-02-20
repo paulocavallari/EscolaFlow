@@ -105,10 +105,10 @@ serve(async (req: Request) => {
         const author = profiles?.find((p) => p.id === payload.author_id);
         const tutor = profiles?.find((p) => p.id === payload.tutor_id);
 
-        // Fetch student name
+        // Fetch student details including guardian phone
         const { data: student } = await supabaseAdmin
             .from('students')
-            .select('name, class:classes!students_class_id_fkey(name)')
+            .select('name, guardian_phone, class:classes!students_class_id_fkey(name)')
             .eq('id', payload.student_id)
             .single();
 
@@ -185,6 +185,14 @@ serve(async (req: Request) => {
                         const r1 = await sendEvolutionMessage(author.whatsapp_number, message);
                         results.push({ recipient: 'author_concluded_tutor', ...r1 });
                     }
+                }
+
+                // Notificar o Responsável (Guardião)
+                if (student?.guardian_phone) {
+                    const guardianMessage = `🏫 *Escola Estadual Virgílio Capoani*\n\nPrezado(a) responsável,\nInformamos que uma ocorrência escolar registrada envolvendo o aluno *${studentName}* foi acompanhada e concluída com sucesso.\n\nPara maiores esclarecimentos, fique à vontade para entrar em contato com a equipe pedagógica.\nObrigado pela parceria.`;
+
+                    const rg = await sendEvolutionMessage(student.guardian_phone, guardianMessage);
+                    results.push({ recipient: 'guardian_concluded', ...rg });
                 }
             }
         }
