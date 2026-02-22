@@ -290,7 +290,12 @@ export default function CreateOccurrenceScreen() {
 
                     {/* Step 2: Record Audio or Type Text */}
                     {step === 'record_audio' && (
-                        <View style={styles.stepContent}>
+                        <ScrollView
+                            style={styles.stepContent}
+                            contentContainerStyle={{ paddingBottom: 40 }}
+                            keyboardShouldPersistTaps="handled"
+                            showsVerticalScrollIndicator={false}
+                        >
                             <Text style={styles.stepTitle}>Detalhes da Ocorrência</Text>
                             <Text style={styles.stepSubtitle}>
                                 Aluno(a): {selectedStudent?.name}
@@ -355,7 +360,7 @@ export default function CreateOccurrenceScreen() {
                             >
                                 <Text style={styles.backButtonText}>← Voltar para seleção</Text>
                             </TouchableOpacity>
-                        </View>
+                        </ScrollView>
                     )}
 
                     {/* Saving indicator */}
@@ -376,8 +381,8 @@ export default function CreateOccurrenceScreen() {
                         onClose={() => setShowReviewModal(false)}
                     />
                 </View>
-            </KeyboardAvoidingView>
-        </View>
+            </KeyboardAvoidingView >
+        </View >
     );
 }
 
