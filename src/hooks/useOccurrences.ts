@@ -37,11 +37,11 @@ export function useOccurrencesList(filters?: {
             let query = supabase
                 .from('occurrences')
                 .select(`
-          *,
-          student:students!occurrences_student_id_fkey(*, class:classes!students_class_id_fkey(*)),
-          author:profiles!occurrences_author_id_fkey(*),
-          tutor:profiles!occurrences_tutor_id_fkey(*),
-          actions(*, author:profiles!actions_author_id_fkey(*))
+          id, student_id, author_id, tutor_id, status, description_formal, created_at, updated_at,
+          student:students!occurrences_student_id_fkey(id, name, matricula, class:classes!students_class_id_fkey(id, name)),
+          author:profiles!occurrences_author_id_fkey(id, full_name, role),
+          tutor:profiles!occurrences_tutor_id_fkey(id, full_name, role),
+          actions(id, action_type, created_at, author:profiles!actions_author_id_fkey(id, full_name, role))
         `)
                 .order('created_at', { ascending: false });
 
@@ -61,6 +61,8 @@ export function useOccurrencesList(filters?: {
             return (data ?? []) as unknown as OccurrenceWithRelations[];
         },
         enabled: !!profileId,
+        staleTime: 60_000,    // 1 minute — serve from cache on navigation
+        gcTime: 300_000,      // 5 minutes — keep in memory
     });
 }
 
@@ -85,6 +87,8 @@ export function useOccurrenceDetail(id: string) {
             return data as unknown as OccurrenceWithRelations;
         },
         enabled: !!id,
+        staleTime: 30_000,   // 30s — detail view is refreshed more often
+        gcTime: 180_000,     // 3 minutes
     });
 }
 
@@ -136,6 +140,26 @@ export function useAddAction() {
             if (statusError) throw statusError;
         },
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: OCCURRENCE_KEYS.all });
+        },
+    });
+}
+
+// ---- Update Action ----
+export function useUpdateAction() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({ id, description }: { id: string; description: string }): Promise<void> => {
+            const { error } = await supabase
+                .from('actions')
+                .update({ description })
+                .eq('id', id);
+
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            // Invalidate to refresh occurrence details
             queryClient.invalidateQueries({ queryKey: OCCURRENCE_KEYS.all });
         },
     });

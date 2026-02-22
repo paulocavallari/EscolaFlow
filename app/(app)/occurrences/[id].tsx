@@ -14,7 +14,7 @@ import {
     TextInput,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useOccurrenceDetail, useAddAction, useProcessAudio, useProcessText, useDeleteOccurrence } from '../../../src/hooks/useOccurrences';
+import { useOccurrenceDetail, useAddAction, useUpdateAction, useProcessAudio, useProcessText, useDeleteOccurrence } from '../../../src/hooks/useOccurrences';
 import { generateOccurrencePDF } from '../../../src/utils/pdfGenerator';
 import { useProfile } from '../../../src/hooks/useProfile';
 import { StatusBadge } from '../../../src/components/StatusBadge';
@@ -43,6 +43,9 @@ export default function OccurrenceDetailScreen() {
     const [pendingActionType, setPendingActionType] = useState<'resolve' | 'escalate' | 'vp_resolve'>('resolve');
     const [manualTreatmentText, setManualTreatmentText] = useState('');
     const processText = useProcessText();
+    const updateAction = useUpdateAction();
+    const [editingActionId, setEditingActionId] = useState<string | null>(null);
+    const [editContent, setEditContent] = useState('');
 
     const canTreat = Boolean(
         occurrence &&
@@ -169,6 +172,20 @@ export default function OccurrenceDetailScreen() {
         }
     }, [occurrence, profileId, pendingActionType, addAction]);
 
+    const handleSaveEdit = async () => {
+        if (!editingActionId || !editContent.trim()) return;
+        try {
+            await updateAction.mutateAsync({ id: editingActionId, description: editContent.trim() });
+            setEditingActionId(null);
+            setEditContent('');
+            if (Platform.OS === 'web') window.alert('Tratativa atualizada com sucesso.');
+            else Alert.alert('Sucesso', 'Tratativa atualizada com sucesso.');
+        } catch (err) {
+            console.error(err);
+            Alert.alert('Erro', 'Falha ao atualizar tratativa.');
+        }
+    };
+
     if (isLoading) {
         return (
             <View style={styles.loadingContainer}>
@@ -243,35 +260,84 @@ export default function OccurrenceDetailScreen() {
             {occurrence.actions && occurrence.actions.length > 0 && (
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>📋 Histórico de Tratativas</Text>
-                    {occurrence.actions.map((action, idx) => (
-                        <View key={action.id} style={styles.timelineItem}>
-                            <View style={styles.timelineDot} />
-                            {idx < occurrence.actions.length - 1 && (
-                                <View style={styles.timelineLine} />
-                            )}
-                            <View style={styles.timelineContent}>
-                                <View style={styles.timelineHeader}>
-                                    <Text style={styles.timelineType}>
-                                        {ACTION_TYPE_LABELS[action.action_type]}
+                    {occurrence.actions.map((action, idx) => {
+                        const isEditing = editingActionId === action.id;
+                        const canEditAction = Boolean(profileId && (action.author_id === profileId || role === UserRole.ADMIN));
+
+                        return (
+                            <View key={action.id} style={styles.timelineItem}>
+                                <View style={styles.timelineDot} />
+                                {idx < occurrence.actions.length - 1 && (
+                                    <View style={styles.timelineLine} />
+                                )}
+                                <View style={styles.timelineContent}>
+                                    <View style={[styles.timelineHeader, { justifyContent: 'space-between', alignItems: 'flex-start' }]}>
+                                        <View>
+                                            <Text style={styles.timelineType}>
+                                                {ACTION_TYPE_LABELS[action.action_type]}
+                                            </Text>
+                                            <Text style={styles.timelineDate}>
+                                                {new Date(action.created_at).toLocaleDateString('pt-BR', {
+                                                    day: '2-digit',
+                                                    month: '2-digit',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                })}
+                                            </Text>
+                                        </View>
+                                        {canEditAction && !isEditing && (
+                                            <TouchableOpacity
+                                                onPress={() => {
+                                                    setEditingActionId(action.id);
+                                                    setEditContent(action.description);
+                                                }}
+                                                style={{ padding: 4 }}
+                                            >
+                                                <Text style={{ color: COLORS.primary, fontSize: 16 }}>✏️ Editar</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                    <Text style={styles.timelineAuthor}>
+                                        Por: {action.author?.full_name ?? '-'}
                                     </Text>
-                                    <Text style={styles.timelineDate}>
-                                        {new Date(action.created_at).toLocaleDateString('pt-BR', {
-                                            day: '2-digit',
-                                            month: '2-digit',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                        })}
-                                    </Text>
+
+                                    {isEditing ? (
+                                        <View style={{ marginTop: 8 }}>
+                                            <TextInput
+                                                style={{ minHeight: 80, backgroundColor: '#fff', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border }}
+                                                multiline
+                                                value={editContent}
+                                                onChangeText={setEditContent}
+                                            />
+                                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 8 }}>
+                                                <TouchableOpacity
+                                                    onPress={() => setEditingActionId(null)}
+                                                    style={{ paddingVertical: 6, paddingHorizontal: 12 }}
+                                                >
+                                                    <Text style={{ color: COLORS.textMuted, fontWeight: '600' }}>Cancelar</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    onPress={handleSaveEdit}
+                                                    disabled={updateAction.isPending}
+                                                    style={{ backgroundColor: COLORS.primary, paddingVertical: 6, paddingHorizontal: 16, borderRadius: 6 }}
+                                                >
+                                                    {updateAction.isPending ? (
+                                                        <ActivityIndicator size="small" color="#fff" />
+                                                    ) : (
+                                                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>Salvar</Text>
+                                                    )}
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    ) : (
+                                        <Text style={styles.timelineDescription}>
+                                            {action.description}
+                                        </Text>
+                                    )}
                                 </View>
-                                <Text style={styles.timelineAuthor}>
-                                    Por: {action.author?.full_name ?? '-'}
-                                </Text>
-                                <Text style={styles.timelineDescription}>
-                                    {action.description}
-                                </Text>
                             </View>
-                        </View>
-                    ))}
+                        );
+                    })}
                 </View>
             )}
 
