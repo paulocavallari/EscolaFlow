@@ -35,9 +35,9 @@ serve(async (req: Request) => {
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
 
     // In local development or anon usage, we might not have a full user. 
-    // If authError says "Invalid JWT", it might be the anon key.
+    // If authError says "Invalid JWT" or "missing sub claim", it might be the anon key.
     // Let's just ensure we have an auth header and a valid Supabase project.
-    if (authError && authError.message !== 'Invalid JWT' && authError.message !== 'Auth session missing!') {
+    if (authError && authError.message !== 'Invalid JWT' && authError.message !== 'Auth session missing!' && !authError.message.includes('missing sub claim')) {
       return new Response(JSON.stringify({ error: 'Unauthorized', details: authError.message }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -127,7 +127,7 @@ Texto original para revisão:
     let formalText = textToProcess; // Fallback to original
 
     if (messageContent) {
-      formalText = messageContent.trim();
+      formalText = messageContent.replace(/<think>[\s\S]*?<\/think>\n?/g, '').trim();
     } else {
       console.warn('OpenRouter rewrite returned no content, using original.', rewriteData);
     }
