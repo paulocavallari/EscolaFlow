@@ -204,6 +204,9 @@ export function useProcessText() {
             const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
             try {
+                console.log(`[processText] Requesting Edge Function at: ${supabaseUrl}/functions/v1/process-text`);
+                console.log(`[processText] Token preview: ${token?.substring(0, 15)}...`);
+
                 const res = await fetch(`${supabaseUrl}/functions/v1/process-text`, {
                     method: 'POST',
                     headers: {
@@ -215,7 +218,10 @@ export function useProcessText() {
                 });
 
                 clearTimeout(timeoutId);
+                console.log(`[processText] Response status: ${res.status}`);
+
                 const resText = await res.text();
+                console.log(`[processText] Unparsed raw response body:`, resText);
 
                 let parsed = null;
                 try {

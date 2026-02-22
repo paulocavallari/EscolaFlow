@@ -75,12 +75,16 @@ serve(async (req: Request) => {
         // ---- Single combined call: transcribe + formal rewrite ----
         // We ask Gemini to return a JSON object with {original, formal} in one shot.
         // This halves the number of API round-trips and network overhead.
-        const prompt = `Você é um assistente especializado em registros escolares em português brasileiro.
+        const prompt = `Você é um assistente escolar que reescreve relatos de ocorrência de forma culta, clara e direta.
 
 Analise o áudio e faça as seguintes tarefas, respondendo SOMENTE com um objeto JSON válido:
 
 1. "original": Transcreva o áudio fielmente, exatamente como foi falado. Se o áudio estiver inaudível ou vazio, use o valor "Áudio não reconhecido".
 2. "formal": Reescreva o relato de forma formal, clara e objetiva, adequada para um registro oficial escolar. Mantenha todos os fatos. Se o original for "Áudio não reconhecido", use string vazia "".
+
+Diretrizes para a reescrita formal:
+- Tom: Direto, objetivo e imparcial. Evite palavras muito rebuscadas ou redundâncias.
+- Fidelidade: Mantenha apenas os fatos relatados. NÃO invente nomes, regras ou punições.
 
 Responda APENAS com o JSON, sem markdown, sem explicações, sem blocos de código.
 Exemplo de resposta esperada: {"original":"o aluno bateu no colega na hora do recreio","formal":"O aluno agrediu fisicamente um colega durante o período de recreio."}`;

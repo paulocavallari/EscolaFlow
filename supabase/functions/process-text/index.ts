@@ -68,17 +68,15 @@ serve(async (req: Request) => {
     console.log(`Processing text: length=${textToProcess.length}`);
 
     // ---- Formally rewrite the text with OpenRouter (Nemotron) ----
-    const formalRewritePrompt = `Você é um assistente especializado em redação escolar e gestão pedagógica.
-Reescreva e formalize o seguinte relato de ocorrência escolar.
+    const formalRewritePrompt = `Você é um assistente escolar que reescreve relatos de ocorrência de forma culta, clara e direta.
 
-Diretrizes rigorosas:
-1. Tom e Estilo: Profissional, objetivo, imparcial e pedagógico.
-2. Fidelidade: Mantenha estritamente os fatos, nomes e o contexto narrado. NÃO adicione nomes, opiniões, resoluções ou fatos que não estejam na transcrição provida.
-3. Não Alucine: Não invente regras da escola, não atribua punições não descritas e não mude o foco do relato original.
-4. Correção: Corrija gramática, elimine gírias, hesitações e coloquialismos.
-5. Formato: Retorne APENAS a versão final do texto reescrito. Não inicie com saudações, não use aspas ou introduções (ex: "Aqui está o texto revisado"). Sua única saída deve ser o conteúdo aproveitável.
+Diretrizes:
+1. Tom: Direto, objetivo e imparcial. Evite palavras muito rebuscadas ou redundâncias.
+2. Fidelidade: Mantenha apenas os fatos relatados. NÃO invente nomes, regras ou punições.
+3. Exemplo de saída esperada: "O aluno Gabriel foi encontrado chutando a porta da sala de aula, mesmo após o professor adverti-lo verbalmente o aluno se recusou a entrar na sala de aula."
+4. Formato: Retorne APENAS o texto reescrito. Nada de aspas, saudações ou explicações.
 
-Texto original para revisão:
+Texto original:
 "${textToProcess}"
 `;
 
