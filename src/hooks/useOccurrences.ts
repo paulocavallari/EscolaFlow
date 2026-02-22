@@ -151,12 +151,14 @@ export function useUpdateAction() {
 
     return useMutation({
         mutationFn: async ({ id, description }: { id: string; description: string }): Promise<void> => {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('actions')
                 .update({ description })
-                .eq('id', id);
+                .eq('id', id)
+                .select();
 
             if (error) throw error;
+            if (!data || data.length === 0) throw new Error('Action not found or permission denied');
         },
         onSuccess: () => {
             // Invalidate to refresh occurrence details
