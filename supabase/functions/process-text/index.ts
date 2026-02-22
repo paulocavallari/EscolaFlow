@@ -54,11 +54,11 @@ serve(async (req: Request) => {
       });
     }
 
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
-    if (!geminiApiKey) {
+    const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
+    if (!openRouterApiKey) {
       return new Response(JSON.stringify({
-        error: 'Gemini API key not configured',
-        details: 'The environment variable GEMINI_API_KEY is missing in the Edge Function'
+        error: 'OpenRouter API key not configured',
+        details: 'The environment variable OPENROUTER_API_KEY is missing in the Edge Function'
       }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -67,40 +67,41 @@ serve(async (req: Request) => {
 
     console.log(`Processing text: length=${textToProcess.length}`);
 
-    // ---- Formally rewrite the text with Gemini ----
-    const formalRewritePrompt = `
-Você é um assistente especializado em redação escolar e gestão de conflitos educacionais.
-Reescreva o texto abaixo em um formato estritamente formal, claro e objetivo, adequado
-para o registro em um sistema de controle de ocorrências escolares.
+    // ---- Formally rewrite the text with OpenRouter (Nemotron) ----
+    const formalRewritePrompt = `Você é um assistente especializado em redação escolar e gestão pedagógica.
+Reescreva e formalize o seguinte relato de ocorrência escolar.
 
-Instruções:
-- Elimine gírias, hesitações e coloquialismos.
-- Mantenha todo o contexto, todos os fatos detalhados e os nomes citados.
-- Escreva em terceira pessoa ou primeira pessoa formal de forma coerente com o relato original.
-- NÃO invente fatos, opiniões, nem resoluções.
-- Seja impessoal e direto.
-- Retorne APENAS a versão final do texto formatada para sistema profissional, sem apresentações, aspas nem cumprimentos.
+Diretrizes rigorosas:
+1. Tom e Estilo: Profissional, objetivo, imparcial e pedagógico.
+2. Fidelidade: Mantenha estritamente os fatos, nomes e o contexto narrado. NÃO adicione nomes, opiniões, resoluções ou fatos que não estejam na transcrição provida.
+3. Não Alucine: Não invente regras da escola, não atribua punições não descritas e não mude o foco do relato original.
+4. Correção: Corrija gramática, elimine gírias, hesitações e coloquialismos.
+5. Formato: Retorne APENAS a versão final do texto reescrito. Não inicie com saudações, não use aspas ou introduções (ex: "Aqui está o texto revisado"). Sua única saída deve ser o conteúdo aproveitável.
 
 Texto original para revisão:
 "${textToProcess}"
-        `;
+`;
 
     const rewriteResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
+      "https://openrouter.ai/api/v1/chat/completions",
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': `Bearer ${openRouterApiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://escolaflow.com.br', // Optional, for OpenRouter analytics
+          'X-Title': 'EscolaFlow' // Optional, for OpenRouter analytics
+        },
         body: JSON.stringify({
-          contents: [
+          model: "nvidia/nemotron-3-nano-30b-a3b:free",
+          messages: [
             {
               role: 'user',
-              parts: [{ text: formalRewritePrompt }],
+              content: formalRewritePrompt,
             },
           ],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 2048,
-          },
+          temperature: 0.2,
+          max_tokens: 2048,
         }),
       }
     );
@@ -121,18 +122,17 @@ Texto original para revisão:
     }
 
     const rewriteData = await rewriteResponse.json();
-    const candidate = rewriteData.candidates?.[0];
+    const messageContent = rewriteData.choices?.[0]?.message?.content;
 
     let formalText = textToProcess; // Fallback to original
 
-    if (candidate && candidate.content?.parts?.[0]?.text) {
-      formalText = candidate.content.parts[0].text.trim();
+    if (messageContent) {
+      formalText = messageContent.trim();
     } else {
-      console.warn('Gemini rewrite returned no content, using original.');
+      console.warn('OpenRouter rewrite returned no content, using original.', rewriteData);
     }
 
-    console.log(`Rewritten formal text (${formalText.length} chars).`);
-
+    console.log(`Rewritten formal text(${formalText.length} chars).`);
     // Success response matching Audio result
     return new Response(JSON.stringify({
       original: textToProcess,
