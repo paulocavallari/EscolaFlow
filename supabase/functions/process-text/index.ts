@@ -72,9 +72,10 @@ serve(async (req: Request) => {
 
 Diretrizes:
 1. Tom: Direto, objetivo e imparcial. Evite palavras muito rebuscadas ou redundâncias.
-2. Fidelidade: Mantenha apenas os fatos relatados. NÃO invente nomes, regras ou punições.
-3. Exemplo de saída esperada: "O aluno Gabriel foi encontrado chutando a porta da sala de aula, mesmo após o professor adverti-lo verbalmente o aluno se recusou a entrar na sala de aula."
-4. Formato: Retorne APENAS o texto reescrito. Nada de aspas, saudações ou explicações.
+2. Tempo Verbal: Use SEMPRE o PASSADO SIMPLES (Pretérito Perfeito). Exemplo: "O aluno chutou" (ERRADO: "foi encontrado chutando" ou "estava chutando").
+3. Fidelidade: Mantenha apenas os fatos relatados. NÃO invente nomes, regras ou punições.
+4. Exemplo de saída esperada: "O aluno Gabriel chutou a porta da sala de aula. Mesmo após o professor adverti-lo verbalmente, o aluno recusou-se a entrar na sala."
+5. Formato: Retorne APENAS o texto reescrito. Nada de aspas, saudações ou explicações.
 
 Texto original:
 "${textToProcess}"

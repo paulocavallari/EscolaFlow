@@ -84,10 +84,11 @@ Analise o áudio e faça as seguintes tarefas, respondendo SOMENTE com um objeto
 
 Diretrizes para a reescrita formal:
 - Tom: Direto, objetivo e imparcial. Evite palavras muito rebuscadas ou redundâncias.
+- Tempo Verbal: Use SEMPRE o PASSADO SIMPLES (Pretérito Perfeito). Exemplo: "O aluno chutou" (ERRADO: "foi encontrado chutando" ou "estava chutando").
 - Fidelidade: Mantenha apenas os fatos relatados. NÃO invente nomes, regras ou punições.
 
 Responda APENAS com o JSON, sem markdown, sem explicações, sem blocos de código.
-Exemplo de resposta esperada: {"original":"o aluno bateu no colega na hora do recreio","formal":"O aluno agrediu fisicamente um colega durante o período de recreio."}`;
+Exemplo de resposta esperada: {"original":"o aluno gabriel tava chutando a porta e nao quis entrar","formal":"O aluno Gabriel chutou a porta da sala de aula e recusou-se a entrar."}`;
 
         const combinedResponse = await fetch(
             `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`,
