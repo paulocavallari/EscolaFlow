@@ -11,25 +11,17 @@ import { ptBR } from 'date-fns/locale';
 
 /**
  * Returns a base64 Data URI for the school header image.
- * - Web: fetches from Vercel's served public asset path
- * - Mobile: loads via expo-asset
- * Returns '' if image is unavailable or is a placeholder stub.
+ * Uses Asset.fromModule for both web and mobile — Expo resolves the
+ * correct hashed URL at runtime regardless of platform.
+ * Returns '' if the image is unavailable or is a placeholder stub.
  */
 async function getHeaderImageDataUri(): Promise<string> {
   try {
-    let uri: string;
-
-    if (Platform.OS === 'web') {
-      // On Vercel/web, assets are served from the app root
-      uri = '/assets/images/cabecalho-vc.jpg';
-    } else {
-      const asset = Asset.fromModule(
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        require('../../assets/images/cabecalho-vc.jpg')
-      );
-      await asset.downloadAsync();
-      uri = asset.localUri || asset.uri;
-    }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const asset = Asset.fromModule(require('../../assets/images/cabecalho-vc.jpg'));
+    await asset.downloadAsync();
+    const uri = asset.localUri || asset.uri;
+    if (!uri) return '';
 
     const response = await fetch(uri);
     if (!response.ok) return '';
@@ -38,7 +30,7 @@ async function getHeaderImageDataUri(): Promise<string> {
     if (buffer.byteLength < 200) return ''; // skip placeholder stubs
 
     const bytes = new Uint8Array(buffer);
-    // Check for GIF magic bytes (placeholder) — 47 49 46 = 'GIF'
+    // Detect GIF magic bytes (47 49 46 = 'GIF') — means it's still the stub
     if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return '';
 
     const chunkSize = 8192;
@@ -52,6 +44,7 @@ async function getHeaderImageDataUri(): Promise<string> {
     return '';
   }
 }
+
 
 const ACTION_TYPE_LABEL: Record<string, string> = {
   [ActionType.RESOLUTION]: 'Resolução – Tutor',
