@@ -42,7 +42,6 @@ export default function OccurrenceDetailScreen() {
     const [showReviewModal, setShowReviewModal] = useState(false);
     const [pendingActionType, setPendingActionType] = useState<'resolve' | 'escalate' | 'vp_resolve'>('resolve');
     const [manualTreatmentText, setManualTreatmentText] = useState('');
-    const processText = useProcessText();
     const updateAction = useUpdateAction();
     const [editingActionId, setEditingActionId] = useState<string | null>(null);
     const [editContent, setEditContent] = useState('');
