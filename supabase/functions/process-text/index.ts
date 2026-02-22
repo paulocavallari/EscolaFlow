@@ -93,7 +93,7 @@ Texto original para revisão:
           'X-Title': 'EscolaFlow' // Optional, for OpenRouter analytics
         },
         body: JSON.stringify({
-          model: "nvidia/nemotron-3-nano-30b-a3b:free",
+          model: "nvidia/nemotron-nano-9b-v2:free",
           messages: [
             {
               role: 'user',
@@ -101,7 +101,7 @@ Texto original para revisão:
             },
           ],
           temperature: 0.2,
-          max_tokens: 2048,
+          max_tokens: 1024,
         }),
       }
     );

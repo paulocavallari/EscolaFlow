@@ -193,7 +193,7 @@ export function useDeleteOccurrence() {
 export function useProcessText() {
     return useMutation({
         mutationFn: async (text: string): Promise<AudioProcessingResult> => { // Returns {original, formal} just like audio
-            const TIMEOUT_MS = 30_000; // 30 seconds for text parsing
+            const TIMEOUT_MS = 60_000; // 60 seconds for text parsing
 
             console.log('[processText] Invoking Edge Function process-text via fetch...');
 
