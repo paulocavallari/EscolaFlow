@@ -13,6 +13,7 @@ import {
     Alert,
     ActivityIndicator,
     Platform,
+    KeyboardAvoidingView,
 } from 'react-native';
 import { router } from 'expo-router';
 import { AudioRecorder } from '../../../src/components/AudioRecorder';
@@ -193,187 +194,190 @@ export default function CreateOccurrenceScreen() {
     }, []);
 
     return (
-        <ScrollView
-            style={styles.container}
-            contentContainerStyle={styles.content}
-            keyboardShouldPersistTaps="handled"
-        >
-            {/* Progress Steps */}
-            <View style={styles.progressBar}>
-                {(['select_student', 'record_audio', 'review'] as Step[]).map((s, i) => (
-                    <View key={s} style={styles.progressStep}>
-                        <View
-                            style={[
-                                styles.progressDot,
-                                step === s && styles.progressDotActive,
-                                (['select_student', 'record_audio', 'review'].indexOf(step) > i) && styles.progressDotDone,
-                            ]}
-                        >
-                            <Text style={styles.progressDotText}>{i + 1}</Text>
-                        </View>
-                        <Text style={[styles.progressLabel, step === s && styles.progressLabelActive]}>
-                            {['Aluno', 'Relato (IA)', 'Revisar'][i]}
-                        </Text>
-                    </View>
-                ))}
-            </View>
-
-            {/* Step 1: Select Student */}
-            {step === 'select_student' && (
-                <View style={styles.stepContent}>
-                    <Text style={styles.stepTitle}>Selecionar Aluno</Text>
-
-                    {/* Class filter */}
-                    <Text style={styles.fieldLabel}>Turma</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.classScroll}>
-                        <TouchableOpacity
-                            style={[styles.classChip, !selectedClassId && styles.classChipActive]}
-                            onPress={() => setSelectedClassId('')}
-                        >
-                            <Text style={[styles.classChipText, !selectedClassId && styles.classChipTextActive]}>
-                                Todas
-                            </Text>
-                        </TouchableOpacity>
-                        {classes?.map((cls) => (
-                            <TouchableOpacity
-                                key={cls.id}
-                                style={[styles.classChip, selectedClassId === cls.id && styles.classChipActive]}
-                                onPress={() => setSelectedClassId(cls.id)}
-                            >
-                                <Text style={[styles.classChipText, selectedClassId === cls.id && styles.classChipTextActive]}>
-                                    {cls.name}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-
-                    {/* Search */}
-                    <TextInput
-                        style={styles.searchInput}
-                        value={studentSearch}
-                        onChangeText={setStudentSearch}
-                        placeholder="Buscar aluno por nome..."
-                        placeholderTextColor={COLORS.textMuted}
-                    />
-
-                    {/* Student FlatList */}
-                    <FlatList
-                        data={filteredStudents}
-                        keyExtractor={(item) => item.id}
-                        renderItem={({ item: student }) => (
-                            <StudentItem
-                                student={student}
-                                isSelected={selectedStudent?.id === student.id}
-                                onPress={setSelectedStudent}
-                            />
-                        )}
-                        ListEmptyComponent={
-                            <Text style={styles.emptyListText}>Nenhum aluno encontrado.</Text>
-                        }
-                        keyboardShouldPersistTaps="handled"
-                        scrollEnabled={false}
-                        style={{ maxHeight: 320 }}
-                    />
-
-                    {selectedStudent && (
-                        <TouchableOpacity
-                            style={styles.nextButton}
-                            onPress={() => setStep('record_audio')}
-                        >
-                            <Text style={styles.nextButtonText}>Próximo →</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            )}
-
-            {/* Step 2: Record Audio or Type Text */}
-            {step === 'record_audio' && (
-                <View style={styles.stepContent}>
-                    <Text style={styles.stepTitle}>Detalhes da Ocorrência</Text>
-                    <Text style={styles.stepSubtitle}>
-                        Aluno(a): {selectedStudent?.name}
-                    </Text>
-
-                    <View style={styles.tabsContainer}>
-                        <TouchableOpacity
-                            style={[styles.tabButton, inputMode === 'audio' && styles.tabButtonActive]}
-                            onPress={() => setInputMode('audio')}
-                        >
-                            <Text style={[styles.tabText, inputMode === 'audio' && styles.tabTextActive]}>🎙️ Áudio</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.tabButton, inputMode === 'text' && styles.tabButtonActive]}
-                            onPress={() => setInputMode('text')}
-                        >
-                            <Text style={[styles.tabText, inputMode === 'text' && styles.tabTextActive]}>✍️ Texto</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {inputMode === 'audio' ? (
-                        <AudioRecorder
-                            onTranscriptionComplete={handleTranscriptionComplete}
-                            isProcessing={processText.isPending}
-                            onCancelProcessing={handleCancelProcessing}
-                        />
-                    ) : (
-                        <View style={styles.textInputContainer}>
-                            <TextInput
-                                style={styles.textInputArea}
-                                placeholder="Descreva os detalhes da ocorrência..."
-                                placeholderTextColor={COLORS.textMuted}
-                                value={manualText}
-                                onChangeText={setManualText}
-                                multiline
-                                textAlignVertical="top"
-                            />
-
-                            {processText.isPending ? (
-                                <View style={styles.processingTextContainer}>
-                                    <ActivityIndicator size="small" color={COLORS.primary} />
-                                    <Text style={styles.processingLabel}>I.A. Reescrevendo relato...</Text>
-
-                                    <TouchableOpacity style={styles.cancelButton} onPress={handleCancelProcessing}>
-                                        <Text style={styles.cancelText}>Cancelar</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            ) : (
-                                <TouchableOpacity
-                                    style={styles.processTextButton}
-                                    onPress={handleTextProcess}
+        <View style={styles.container}>
+            <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
+                <View style={styles.content}>
+                    {/* Progress Steps */}
+                    <View style={styles.progressBar}>
+                        {(['select_student', 'record_audio', 'review'] as Step[]).map((s, i) => (
+                            <View key={s} style={styles.progressStep}>
+                                <View
+                                    style={[
+                                        styles.progressDot,
+                                        step === s && styles.progressDotActive,
+                                        (['select_student', 'record_audio', 'review'].indexOf(step) > i) && styles.progressDotDone,
+                                    ]}
                                 >
-                                    <Text style={styles.processTextButtonLabel}>✨ Formatar Relato com I.A.</Text>
+                                    <Text style={styles.progressDotText}>{i + 1}</Text>
+                                </View>
+                                <Text style={[styles.progressLabel, step === s && styles.progressLabelActive]}>
+                                    {['Aluno', 'Relato (IA)', 'Revisar'][i]}
+                                </Text>
+                            </View>
+                        ))}
+                    </View>
+
+                    {/* Step 1: Select Student */}
+                    {step === 'select_student' && (
+                        <View style={styles.stepContent}>
+                            <Text style={styles.stepTitle}>Selecionar Aluno</Text>
+
+                            {/* Class filter */}
+                            <Text style={styles.fieldLabel}>Turma</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.classScroll}>
+                                <TouchableOpacity
+                                    style={[styles.classChip, !selectedClassId && styles.classChipActive]}
+                                    onPress={() => setSelectedClassId('')}
+                                >
+                                    <Text style={[styles.classChipText, !selectedClassId && styles.classChipTextActive]}>
+                                        Todas
+                                    </Text>
+                                </TouchableOpacity>
+                                {classes?.map((cls) => (
+                                    <TouchableOpacity
+                                        key={cls.id}
+                                        style={[styles.classChip, selectedClassId === cls.id && styles.classChipActive]}
+                                        onPress={() => setSelectedClassId(cls.id)}
+                                    >
+                                        <Text style={[styles.classChipText, selectedClassId === cls.id && styles.classChipTextActive]}>
+                                            {cls.name}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+
+                            {/* Search */}
+                            <TextInput
+                                style={styles.searchInput}
+                                value={studentSearch}
+                                onChangeText={setStudentSearch}
+                                placeholder="Buscar aluno por nome..."
+                                placeholderTextColor={COLORS.textMuted}
+                            />
+
+                            {/* Student FlatList */}
+                            <FlatList
+                                data={filteredStudents}
+                                keyExtractor={(item) => item.id}
+                                renderItem={({ item: student }) => (
+                                    <StudentItem
+                                        student={student}
+                                        isSelected={selectedStudent?.id === student.id}
+                                        onPress={setSelectedStudent}
+                                    />
+                                )}
+                                ListEmptyComponent={
+                                    <Text style={styles.emptyListText}>Nenhum aluno encontrado.</Text>
+                                }
+                                keyboardShouldPersistTaps="handled"
+                                style={{ flex: 1, marginTop: 10 }}
+                                contentContainerStyle={{ paddingBottom: 100 }}
+                            />
+
+                            {selectedStudent && (
+                                <TouchableOpacity
+                                    style={styles.nextButton}
+                                    onPress={() => setStep('record_audio')}
+                                >
+                                    <Text style={styles.nextButtonText}>Próximo →</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
                     )}
 
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => setStep('select_student')}
-                    >
-                        <Text style={styles.backButtonText}>← Voltar para seleção</Text>
-                    </TouchableOpacity>
-                </View>
-            )}
+                    {/* Step 2: Record Audio or Type Text */}
+                    {step === 'record_audio' && (
+                        <View style={styles.stepContent}>
+                            <Text style={styles.stepTitle}>Detalhes da Ocorrência</Text>
+                            <Text style={styles.stepSubtitle}>
+                                Aluno(a): {selectedStudent?.name}
+                            </Text>
 
-            {/* Saving indicator */}
-            {createOccurrence.isPending && (
-                <View style={styles.savingOverlay}>
-                    <ActivityIndicator size="large" color={COLORS.primary} />
-                    <Text style={styles.savingText}>Salvando ocorrência...</Text>
-                </View>
-            )}
+                            <View style={styles.tabsContainer}>
+                                <TouchableOpacity
+                                    style={[styles.tabButton, inputMode === 'audio' && styles.tabButtonActive]}
+                                    onPress={() => setInputMode('audio')}
+                                >
+                                    <Text style={[styles.tabText, inputMode === 'audio' && styles.tabTextActive]}>🎙️ Áudio</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.tabButton, inputMode === 'text' && styles.tabButtonActive]}
+                                    onPress={() => setInputMode('text')}
+                                >
+                                    <Text style={[styles.tabText, inputMode === 'text' && styles.tabTextActive]}>✍️ Texto</Text>
+                                </TouchableOpacity>
+                            </View>
 
-            {/* AI Review Modal */}
-            <AIReviewModal
-                visible={showReviewModal}
-                originalText={originalText}
-                formalText={formalText}
-                onConfirm={handleConfirmText}
-                onReRecord={handleReRecord}
-                onClose={() => setShowReviewModal(false)}
-            />
-        </ScrollView>
+                            {inputMode === 'audio' ? (
+                                <AudioRecorder
+                                    onTranscriptionComplete={handleTranscriptionComplete}
+                                    isProcessing={processText.isPending}
+                                    onCancelProcessing={handleCancelProcessing}
+                                />
+                            ) : (
+                                <View style={styles.textInputContainer}>
+                                    <TextInput
+                                        style={styles.textInputArea}
+                                        placeholder="Descreva os detalhes da ocorrência..."
+                                        placeholderTextColor={COLORS.textMuted}
+                                        value={manualText}
+                                        onChangeText={setManualText}
+                                        multiline
+                                        textAlignVertical="top"
+                                    />
+
+                                    {processText.isPending ? (
+                                        <View style={styles.processingTextContainer}>
+                                            <ActivityIndicator size="small" color={COLORS.primary} />
+                                            <Text style={styles.processingLabel}>I.A. Reescrevendo relato...</Text>
+
+                                            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelProcessing}>
+                                                <Text style={styles.cancelText}>Cancelar</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    ) : (
+                                        <TouchableOpacity
+                                            style={styles.processTextButton}
+                                            onPress={handleTextProcess}
+                                        >
+                                            <Text style={styles.processTextButtonLabel}>✨ Formatar Relato com I.A.</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            )}
+
+                            <TouchableOpacity
+                                style={styles.backButton}
+                                onPress={() => setStep('select_student')}
+                            >
+                                <Text style={styles.backButtonText}>← Voltar para seleção</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {/* Saving indicator */}
+                    {createOccurrence.isPending && (
+                        <View style={styles.savingOverlay}>
+                            <ActivityIndicator size="large" color={COLORS.primary} />
+                            <Text style={styles.savingText}>Salvando ocorrência...</Text>
+                        </View>
+                    )}
+
+                    {/* AI Review Modal */}
+                    <AIReviewModal
+                        visible={showReviewModal}
+                        originalText={originalText}
+                        formalText={formalText}
+                        onConfirm={handleConfirmText}
+                        onReRecord={handleReRecord}
+                        onClose={() => setShowReviewModal(false)}
+                    />
+                </View>
+            </KeyboardAvoidingView>
+        </View>
     );
 }
 
@@ -383,8 +387,8 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.background,
     },
     content: {
+        flex: 1,
         padding: 20,
-        paddingBottom: 40,
     },
     progressBar: {
         flexDirection: 'row',
@@ -423,7 +427,9 @@ const styles = StyleSheet.create({
     progressLabelActive: {
         color: COLORS.primary,
     },
-    stepContent: {},
+    stepContent: {
+        flex: 1,
+    },
     stepTitle: {
         fontSize: 20,
         fontWeight: '700',
