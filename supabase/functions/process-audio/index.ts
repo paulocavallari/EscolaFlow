@@ -1,6 +1,6 @@
 // supabase/functions/process-audio/index.ts
-// Edge Function: Audio Processing via Google Gemini API (Free Tier)
-// Gemini handles both transcription and formal rewriting in a single multimodal call.
+// Edge Function: Audio Processing via Google Gemini 2.0 Flash
+// Single multimodal call: transcribes audio AND rewrites formally in one request.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -9,6 +9,10 @@ const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Use gemini-2.5-flash
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 serve(async (req: Request) => {
     // Handle CORS preflight
@@ -40,7 +44,6 @@ serve(async (req: Request) => {
             });
         }
 
-        // Accept JSON body with base64 audio (sent by supabase.functions.invoke)
         const body = await req.json();
         const audioBase64: string = body.audio;
         const mimeType: string = body.mimeType || 'audio/mp4';
@@ -56,18 +59,31 @@ serve(async (req: Request) => {
         if (!geminiApiKey) {
             return new Response(JSON.stringify({
                 error: 'Gemini API key not configured',
-                details: 'The environment variable GEMINI_API_KEY is missing in the Edge Function'
+                details: 'The environment variable GEMINI_API_KEY is missing',
             }), {
                 status: 500,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
         }
 
-        console.log(`Processing audio: base64Length=${audioBase64.length}, mimeType=${mimeType}`);
+        console.log(`[process-audio] model=${GEMINI_MODEL} base64Length=${audioBase64.length} mimeType=${mimeType}`);
+        const startTime = Date.now();
 
-        // ---- Step 1: Transcribe audio with Gemini (multimodal) ----
-        const transcriptionResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+        // ---- Single combined call: transcribe + formal rewrite ----
+        // We ask Gemini to return a JSON object with {original, formal} in one shot.
+        // This halves the number of API round-trips and network overhead.
+        const prompt = `Você é um assistente especializado em registros escolares em português brasileiro.
+
+Analise o áudio e faça as seguintes tarefas, respondendo SOMENTE com um objeto JSON válido:
+
+1. "original": Transcreva o áudio fielmente, exatamente como foi falado. Se o áudio estiver inaudível ou vazio, use o valor "Áudio não reconhecido".
+2. "formal": Reescreva o relato de forma formal, clara e objetiva, adequada para um registro oficial escolar. Mantenha todos os fatos. Se o original for "Áudio não reconhecido", use string vazia "".
+
+Responda APENAS com o JSON, sem markdown, sem explicações, sem blocos de código.
+Exemplo de resposta esperada: {"original":"o aluno bateu no colega na hora do recreio","formal":"O aluno agrediu fisicamente um colega durante o período de recreio."}`;
+
+        const combinedResponse = await fetch(
+            `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -81,129 +97,82 @@ serve(async (req: Request) => {
                                         data: audioBase64,
                                     },
                                 },
-                                {
-                                    text: 'Transcreva o áudio acima em português brasileiro. Retorne APENAS o texto transcrito, sem explicações, sem formatação, sem aspas. Se o áudio estiver vazio ou inaudível, retorne "Áudio não reconhecido".',
-                                },
+                                { text: prompt },
                             ],
                         },
                     ],
                     generationConfig: {
-                        temperature: 0.1,
+                        temperature: 0.2,
                         maxOutputTokens: 2048,
+                        responseMimeType: 'application/json',
                     },
                 }),
             }
         );
 
-        if (!transcriptionResponse.ok) {
-            const errBody = await transcriptionResponse.text();
-            console.error('Gemini transcription error:', errBody);
-            return new Response(JSON.stringify({ error: 'Transcription failed', details: errBody }), {
+        const elapsed = Date.now() - startTime;
+        console.log(`[process-audio] Gemini responded in ${elapsed}ms. status=${combinedResponse.status}`);
+
+        if (!combinedResponse.ok) {
+            const errBody = await combinedResponse.text();
+            console.error('[process-audio] Gemini API error:', errBody);
+            return new Response(JSON.stringify({ error: 'Audio processing failed', details: errBody }), {
                 status: 500,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
         }
 
-        const transcriptionData = await transcriptionResponse.json();
+        const geminiData = await combinedResponse.json();
 
-        // Check for safety blocks or empty candidates
-        const candidate = transcriptionData.candidates?.[0];
+        const candidate = geminiData.candidates?.[0];
         if (!candidate) {
-            const promptFeedback = transcriptionData.promptFeedback;
-            console.error('Gemini returned no candidates. promptFeedback:', JSON.stringify(promptFeedback));
+            const promptFeedback = geminiData.promptFeedback;
+            console.error('[process-audio] No candidates returned. promptFeedback:', JSON.stringify(promptFeedback));
             return new Response(JSON.stringify({
                 original: 'Áudio não reconhecido',
                 formal: '',
-                error: 'Gemini returned no response. Possible safety block or unsupported audio format.',
+                error: 'Gemini returned no response (possible safety block or unsupported audio format)',
             }), {
                 status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
         }
 
-        // Warn if the response was cut short (e.g. SAFETY, MAX_TOKENS)
         if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-            console.warn(`Gemini transcription finishReason: ${candidate.finishReason}`);
+            console.warn(`[process-audio] Unexpected finishReason: ${candidate.finishReason}`);
         }
 
-        const transcription = candidate.content?.parts?.[0]?.text?.trim() ?? '';
-        console.log(`Transcription result (${transcription.length} chars): "${transcription.slice(0, 100)}..."`);
+        const rawText = candidate.content?.parts?.[0]?.text?.trim() ?? '';
+        console.log(`[process-audio] Raw response (${rawText.length} chars): "${rawText.slice(0, 200)}"`);
 
-        if (!transcription || transcription === 'Áudio não reconhecido') {
-            return new Response(JSON.stringify({
-                original: transcription || 'Áudio não reconhecido',
-                formal: '',
-                error: 'Could not transcribe audio',
-            }), {
-                status: 200,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
+        // Parse JSON response from Gemini
+        let original = 'Áudio não reconhecido';
+        let formal = '';
+
+        try {
+            // Strip any accidental markdown fences before parsing
+            const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+            const parsed = JSON.parse(cleaned);
+            original = parsed.original || 'Áudio não reconhecido';
+            formal = parsed.formal || '';
+        } catch (parseErr) {
+            // Gemini didn't return valid JSON — treat entire text as transcription and reuse it
+            console.warn('[process-audio] JSON parse failed, using raw text as original:', parseErr);
+            original = rawText || 'Áudio não reconhecido';
+            formal = rawText;
         }
 
-        // ---- Step 2: Formal rewrite with Gemini ----
-        const rewriteResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [
-                        {
-                            parts: [
-                                {
-                                    text: `Você é um redator profissional especializado em documentos escolares.
+        console.log(`[process-audio] Done. elapsed=${elapsed}ms original="${original.slice(0, 80)}..."`);
 
-Reescreva o seguinte relato de ocorrência escolar de forma formal, clara e objetiva, 
-mantendo todos os fatos e detalhes importantes. Use linguagem adequada para um 
-registro oficial escolar. Não adicione informações que não estejam no texto original.
-Mantenha o texto em português brasileiro.
-Retorne APENAS o texto reescrito, sem explicações adicionais.
-
-Relato original:
-"${transcription}"`,
-                                },
-                            ],
-                        },
-                    ],
-                    generationConfig: {
-                        temperature: 0.3,
-                        maxOutputTokens: 2048,
-                    },
-                }),
-            }
-        );
-
-        if (!rewriteResponse.ok) {
-            const errBody = await rewriteResponse.text();
-            console.error('Gemini rewrite error:', errBody);
-            // Return transcription even if rewrite fails
-            return new Response(JSON.stringify({
-                original: transcription,
-                formal: transcription,
-                rewrite_error: 'Formal rewrite failed, returning original',
-            }), {
-                status: 200,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-        }
-
-        const rewriteData = await rewriteResponse.json();
-        const formalText =
-            rewriteData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? transcription;
-
-        return new Response(JSON.stringify({
-            original: transcription,
-            formal: formalText,
-        }), {
+        return new Response(JSON.stringify({ original, formal }), {
             status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
     } catch (error: any) {
-        console.error('Process audio error:', error);
+        console.error('[process-audio] Unexpected error:', error);
         return new Response(JSON.stringify({
             error: 'Internal server error',
             details: error.message || String(error),
-            stack: error.stack
         }), {
             status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
