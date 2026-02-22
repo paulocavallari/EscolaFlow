@@ -1,204 +1,286 @@
+// src/utils/pdfGenerator.ts
+// Generates a properly structured PDF occurrence report with embedded school logo
+
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
-import { OccurrenceWithRelations, UserRole } from '../types/database';
+import { Asset } from 'expo-asset';
+import { OccurrenceWithRelations, UserRole, ActionType } from '../types/database';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Asset } from 'expo-asset';
 
-export async function generateOccurrencePDF(occurrence: OccurrenceWithRelations) {
-    try {
-        // Load the header image asset
-        // Ensure you have the file 'cabecalho-vc.jpg' in 'assets/images'
-        const cabecalhoAsset = Asset.fromModule(require('../../assets/images/cabecalho-vc.jpg'));
-        await cabecalhoAsset.downloadAsync();
-        const headerImageUri = cabecalhoAsset.localUri || cabecalhoAsset.uri;
+/** Reads an expo-asset and returns it as a base64 data URI */
+async function assetToBase64DataUri(module: number, mimeType = 'image/jpeg'): Promise<string> {
+  const asset = Asset.fromModule(module);
+  await asset.downloadAsync();
 
-        const dataFormatada = format(new Date(occurrence.created_at), 'dd/MM/yyyy', { locale: ptBR });
+  const uri = asset.localUri || asset.uri;
 
-        // Find specific actions for mediation
-        const profActions = occurrence.actions?.filter(a => a.author.role === UserRole.PROFESSOR) || [];
-        const vpActions = occurrence.actions?.filter(a => a.author.role === UserRole.VICE_DIRECTOR || a.author.role === UserRole.ADMIN) || [];
+  // Fetch URI (works for both file:// on mobile and http:// on web)
+  const response = await fetch(uri);
+  const blob = await response.blob();
 
-        const formatActions = (actions: typeof profActions) =>
-            actions.map(a => `<p>- ${a.description}</p>`).join('') || '<p>___________________________________________________________________</p>';
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      resolve(result); // already a data:image/...;base64,... string
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
-        const htmlContent = `
-            <!DOCTYPE html>
-            <html lang="pt-BR">
-            <head>
-                <meta charset="UTF-8">
-                <style>
-                    body {
-                        font-family: Arial, sans-serif;
-                        padding: 20px;
-                        color: #000;
-                        line-height: 1.5;
-                    }
-                    .header {
-                        text-align: center;
-                        margin-bottom: 20px;
-                        border-bottom: 2px solid #820000;
-                        padding-bottom: 10px;
-                    }
-                    .header img {
-                        width: 100%;
-                        max-height: 120px;
-                        object-fit: contain;
-                    }
-                    .title {
-                        text-align: center;
-                        font-weight: bold;
-                        font-size: 18px;
-                        margin-bottom: 30px;
-                    }
-                    .row {
-                        margin-bottom: 15px;
-                    }
-                    .label {
-                        font-weight: bold;
-                    }
-                    .value {
-                        border-bottom: 1px solid #000;
-                        display: inline-block;
-                        padding: 0 5px;
-                        min-width: 200px;
-                    }
-                    .flex-row {
-                        display: flex;
-                        justify-content: space-between;
-                        margin-bottom: 15px;
-                    }
-                    .flex-item {
-                        flex: 1;
-                    }
-                    .section-title {
-                        font-weight: bold;
-                        margin-top: 25px;
-                        margin-bottom: 10px;
-                    }
-                    .text-box {
-                        border-bottom: 1px solid #000;
-                        min-height: 60px;
-                        width: 100%;
-                        padding: 5px 0;
-                        white-space: pre-wrap;
-                    }
-                    .signature-section {
-                        margin-top: 60px;
-                        display: flex;
-                        justify-content: space-between;
-                        text-align: center;
-                    }
-                    .signature-box {
-                        flex: 1;
-                        margin: 0 10px;
-                    }
-                    .signature-line {
-                        border-top: 1px solid #000;
-                        margin-top: 40px;
-                        padding-top: 5px;
-                        font-size: 14px;
-                        font-weight: bold;
-                    }
-                    .footer {
-                        margin-top: 30px;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <img src="${headerImageUri}" alt="Cabeçalho Virgilio Capoani" />
-                </div>
-                
-                <div class="title">Relatório de Ocorrência</div>
-                
-                <div class="row">
-                    <span class="label">Aluno:</span>
-                    <span class="value" style="width: 80%;">${occurrence.student?.name || ''}</span>
-                </div>
-                
-                <div class="flex-row">
-                    <div class="flex-item">
-                        <span class="label">Turma:</span>
-                        <span class="value" style="min-width: 100px;">${occurrence.student?.class?.name || ''}</span>
-                    </div>
-                    <div class="flex-item">
-                        <span class="label">Data:</span>
-                        <span class="value" style="min-width: 100px;">${dataFormatada}</span>
-                    </div>
-                </div>
-                
-                <div class="row">
-                    <span class="label">Responsável Pela Ocorrência:</span>
-                    <span class="value" style="width: 70%;">${occurrence.author?.full_name || ''}</span>
-                </div>
-                
-                <div class="row">
-                    <span class="label">Local da Ocorrência:</span>
-                    <span class="value" style="width: 75%;">Dependências da Escola</span>
-                </div>
-                
-                <div class="section-title">Ocorrência:</div>
-                <div class="text-box">${occurrence.description_formal}</div>
-                
-                <div class="section-title">Mediação e encaminhamentos do professor:</div>
-                <div class="text-box">${formatActions(profActions)}</div>
-                
-                <div class="section-title">Mediação e encaminhamentos da equipe gestora:</div>
-                <div class="text-box">${formatActions(vpActions)}</div>
-                
-                <div class="section-title">Parecer:</div>
-                <div class="text-box">
-                    Ocorrência classificada como ${occurrence.status === 'CONCLUDED' ? 'CONCLUÍDA' : occurrence.status}.
-                </div>
-                
-                <div class="signature-section">
-                    <div class="signature-box">
-                        <div class="signature-line">Ciência do aluno</div>
-                    </div>
-                    <div class="signature-box">
-                        <div class="signature-line">Equipe gestora</div>
-                    </div>
-                    <div class="signature-box">
-                        <div class="signature-line">Ciência do Responsável</div>
-                    </div>
-                </div>
-                
-                <div class="footer row">
-                    <span class="label">Telefone(s) para contato:</span>
-                    <span class="value" style="width: 70%;">____________________________________________________________________</span>
-                </div>
-            </body>
-            </html>
-        `;
+const ACTION_TYPE_LABEL: Record<string, string> = {
+  [ActionType.RESOLUTION]: 'Resolução pelo Tutor',
+  [ActionType.ESCALATION]: 'Encaminhamento à Vice-Direção',
+  [ActionType.VP_RESOLUTION]: 'Resolução pela Vice-Direção',
+};
 
-        const { uri } = await Print.printToFileAsync({
-            html: htmlContent,
-            base64: false
-        });
+function formatActionRows(actions: OccurrenceWithRelations['actions']): string {
+  if (!actions || actions.length === 0) {
+    return '<p style="color:#666">Nenhuma tratativa registrada.</p>';
+  }
+  return actions
+    .map((a) => {
+      const date = format(new Date(a.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+      const type = ACTION_TYPE_LABEL[a.action_type] ?? a.action_type;
+      return `
+                <div style="margin-bottom:12px; padding:10px; border-left:3px solid #820000; background:#fafafa;">
+                    <strong>${type}</strong> — ${a.author?.full_name ?? '-'} &nbsp;<span style="color:#666;font-size:12px">(${date})</span><br/>
+                    <span style="white-space:pre-wrap">${a.description}</span>
+                </div>`;
+    })
+    .join('');
+}
 
-        if (Platform.OS === 'web') {
-            // Web Download
-            const link = document.createElement('a');
-            link.href = uri;
-            link.download = `Requerimento_${occurrence.student?.name?.replace(/\s+/g, '_')}.pdf`;
-            link.click();
-        } else {
-            // Mobile share
-            const canShare = await Sharing.isAvailableAsync();
-            if (canShare) {
-                await Sharing.shareAsync(uri, {
-                    UTI: '.pdf',
-                    mimeType: 'application/pdf',
-                    dialogTitle: 'Exportar Relatório',
-                });
-            } else {
-                console.warn('Sharing not available on this device');
-            }
-        }
-    } catch (err) {
-        console.error('Error generating PDF:', err);
-        throw err;
+export async function generateOccurrencePDF(occurrence: OccurrenceWithRelations): Promise<void> {
+  // Convert header image to base64 so it renders inside the PDF regardless of filesystem
+  let headerImgSrc = '';
+  try {
+    headerImgSrc = await assetToBase64DataUri(
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      require('../../assets/images/cabecalho-vc.jpg')
+    );
+  } catch (err) {
+    console.warn('[PDF] Could not load header image, proceeding without it:', err);
+  }
+
+  const dataFormatada = format(new Date(occurrence.created_at), "dd 'de' MMMM 'de' yyyy", {
+    locale: ptBR,
+  });
+  const horaFormatada = format(new Date(occurrence.created_at), 'HH:mm', { locale: ptBR });
+
+  // Split actions by author role
+  const vpActions = (occurrence.actions ?? []).filter(
+    (a) =>
+      a.author?.role === UserRole.VICE_DIRECTOR ||
+      a.author?.role === UserRole.ADMIN
+  );
+  // Professor/Tutor actions = all actions NOT from VP/Admin
+  const profActions = (occurrence.actions ?? []).filter(
+    (a) =>
+      a.author?.role !== UserRole.VICE_DIRECTOR &&
+      a.author?.role !== UserRole.ADMIN
+  );
+
+  const headerHtml = headerImgSrc
+    ? `<img src="${headerImgSrc}" alt="Cabeçalho Escola" style="width:100%;max-height:130px;object-fit:contain;" />`
+    : `<h2 style="color:#820000;margin:0">Centro Estadual de Educação Tecnológica Paula Souza</h2>
+           <h3 style="margin:4px 0">E.E. Virgílio Capoani</h3>`;
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      color: #111;
+      padding: 28px 36px;
+      line-height: 1.55;
     }
+    .header {
+      text-align: center;
+      border-bottom: 2.5px solid #820000;
+      padding-bottom: 12px;
+      margin-bottom: 18px;
+    }
+    .doc-title {
+      text-align: center;
+      font-size: 16px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 20px;
+      color: #820000;
+    }
+    table.info-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+    }
+    table.info-table td {
+      padding: 5px 8px;
+      border: 1px solid #ccc;
+      vertical-align: top;
+    }
+    table.info-table td.label {
+      font-weight: bold;
+      background: #f5f5f5;
+      width: 32%;
+      white-space: nowrap;
+    }
+    .section-title {
+      font-weight: bold;
+      font-size: 13px;
+      background: #820000;
+      color: #fff;
+      padding: 5px 10px;
+      margin-top: 18px;
+      margin-bottom: 8px;
+    }
+    .text-block {
+      border: 1px solid #ccc;
+      padding: 10px 12px;
+      min-height: 60px;
+      white-space: pre-wrap;
+      background: #fff;
+      margin-bottom: 6px;
+    }
+    .signature-section {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 50px;
+      gap: 20px;
+    }
+    .signature-box {
+      flex: 1;
+      text-align: center;
+    }
+    .signature-line {
+      border-top: 1px solid #333;
+      margin-top: 44px;
+      padding-top: 6px;
+      font-size: 12px;
+    }
+    .footer {
+      margin-top: 28px;
+      font-size: 11px;
+      color: #666;
+      text-align: center;
+      border-top: 1px solid #ccc;
+      padding-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">${headerHtml}</div>
+
+  <div class="doc-title">Relatório de Ocorrência Escolar</div>
+
+  <table class="info-table">
+    <tr>
+      <td class="label">Aluno(a):</td>
+      <td colspan="3">${occurrence.student?.name ?? '—'}</td>
+    </tr>
+    <tr>
+      <td class="label">Turma:</td>
+      <td>${occurrence.student?.class?.name ?? '—'}</td>
+      <td class="label">Data:</td>
+      <td>${dataFormatada} às ${horaFormatada}</td>
+    </tr>
+    <tr>
+      <td class="label">Registrado por:</td>
+      <td>${occurrence.author?.full_name ?? '—'}</td>
+      <td class="label">Tutor(a) responsável:</td>
+      <td>${occurrence.tutor?.full_name ?? '—'}</td>
+    </tr>
+    <tr>
+      <td class="label">Local:</td>
+      <td colspan="3">Dependências da Escola</td>
+    </tr>
+  </table>
+
+  <div class="section-title">📝 Descrição da Ocorrência</div>
+  <div class="text-block">${occurrence.description_formal ?? '—'}</div>
+
+  <div class="section-title">📋 Mediação e Encaminhamentos do Tutor / Professor</div>
+  <div class="text-block">${formatActionRows(profActions)}</div>
+
+  <div class="section-title">🏢 Mediação e Encaminhamentos da Equipe Gestora</div>
+  <div class="text-block">${formatActionRows(vpActions)}</div>
+
+  <div class="section-title">📌 Parecer Final</div>
+  <div class="text-block">
+    Ocorrência registrada e classificada como:
+    <strong>${occurrence.status === 'CONCLUDED' ? 'CONCLUÍDA ✔️' : occurrence.status}</strong>.
+  </div>
+
+  <div class="signature-section">
+    <div class="signature-box">
+      <div class="signature-line">Ciência do(a) Aluno(a)</div>
+    </div>
+    <div class="signature-box">
+      <div class="signature-line">Equipe Gestora</div>
+    </div>
+    <div class="signature-box">
+      <div class="signature-line">Ciência do(a) Responsável</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Documento gerado automaticamente pelo sistema EscolaFlow em
+    ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}.
+    Telefone(s) para contato: ___________________________
+  </div>
+
+</body>
+</html>`;
+
+  if (Platform.OS === 'web') {
+    // On web, expo-print's printToFileAsync is not supported.
+    // Open HTML in a new window and trigger the browser's native print dialog
+    // (user can Save as PDF from there).
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      // Wait for images to load before printing
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+      // Fallback if onload doesn't fire
+      setTimeout(() => {
+        try { printWindow.print(); } catch { /* already printed */ }
+      }, 1500);
+    } else {
+      // Popup blocked — create a blob URL and open it
+      const blob = new Blob([htmlContent], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }
+  } else {
+    // Mobile: generate a real PDF file and share it
+    const { uri } = await Print.printToFileAsync({ html: htmlContent, base64: false });
+    const canShare = await Sharing.isAvailableAsync();
+    if (canShare) {
+      await Sharing.shareAsync(uri, {
+        UTI: '.pdf',
+        mimeType: 'application/pdf',
+        dialogTitle: 'Exportar Relatório de Ocorrência',
+      });
+    }
+  }
 }
