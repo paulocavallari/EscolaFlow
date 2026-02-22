@@ -130,19 +130,30 @@ export default function OccurrenceDetailScreen() {
         }
     };
 
+    // Transfer AI processed text to the manual input field
+    const handleConfirmReview = useCallback((editedText: string) => {
+        setShowReviewModal(false);
+        setManualTreatmentText(editedText);
+        setTreatmentFormal(''); // Clear formal so it doesn't trigger the modal loop again
+    }, []);
+
     // Submit treatment action
-    const handleSubmitAction = useCallback(async (description: string) => {
+    const handleSubmitAction = useCallback(async (actionTypeParam: 'resolve' | 'escalate' | 'vp_resolve') => {
         if (!occurrence || !profileId) return;
 
-        setShowReviewModal(false);
+        if (!manualTreatmentText.trim()) {
+            if (Platform.OS === 'web') window.alert('Digite a providência ou grave um áudio primeiro.');
+            else Alert.alert('Atenção', 'Digite a providência primeiro.');
+            return;
+        }
 
         let actionType: ActionType;
         let newStatus: OccurrenceStatus;
 
-        if (pendingActionType === 'resolve') {
+        if (actionTypeParam === 'resolve') {
             actionType = ActionType.RESOLUTION;
             newStatus = OccurrenceStatus.CONCLUDED;
-        } else if (pendingActionType === 'escalate') {
+        } else if (actionTypeParam === 'escalate') {
             actionType = ActionType.ESCALATION;
             newStatus = OccurrenceStatus.ESCALATED_VP;
         } else {
@@ -154,7 +165,7 @@ export default function OccurrenceDetailScreen() {
             await addAction.mutateAsync({
                 occurrence_id: occurrence.id,
                 author_id: profileId,
-                description,
+                description: manualTreatmentText.trim(),
                 action_type: actionType,
                 newStatus,
             });
@@ -170,7 +181,7 @@ export default function OccurrenceDetailScreen() {
         } catch (err) {
             Alert.alert('Erro', 'Falha ao registrar a tratativa.');
         }
-    }, [occurrence, profileId, pendingActionType, addAction]);
+    }, [occurrence, profileId, manualTreatmentText, addAction]);
 
     const handleSaveEdit = async () => {
         if (!editingActionId || !editContent.trim()) return;
@@ -395,18 +406,8 @@ export default function OccurrenceDetailScreen() {
                         {occurrence.status !== OccurrenceStatus.CONCLUDED && (
                             <TouchableOpacity
                                 style={[styles.actionBtn, styles.resolveBtn]}
-                                onPress={async () => {
-                                    setPendingActionType(
-                                        role === UserRole.VICE_DIRECTOR ? 'vp_resolve' : 'resolve'
-                                    );
-                                    if (treatmentFormal) {
-                                        setShowReviewModal(true);
-                                    } else if (manualTreatmentText.trim()) {
-                                        await handleTextSubmit();
-                                    } else {
-                                        if (Platform.OS === 'web') window.alert('Grave o áudio ou digite o texto primeiro e processe.');
-                                        else Alert.alert('Atenção', 'Grave o áudio ou digite a providência primeiro.');
-                                    }
+                                onPress={() => {
+                                    handleSubmitAction(role === UserRole.VICE_DIRECTOR ? 'vp_resolve' : 'resolve');
                                 }}
                             >
                                 <Text style={styles.actionBtnText}>✅ Concluir</Text>
@@ -415,16 +416,8 @@ export default function OccurrenceDetailScreen() {
                         {occurrence.status === OccurrenceStatus.PENDING_TUTOR && role !== UserRole.VICE_DIRECTOR && (
                             <TouchableOpacity
                                 style={[styles.actionBtn, styles.escalateBtn]}
-                                onPress={async () => {
-                                    setPendingActionType('escalate');
-                                    if (treatmentFormal) {
-                                        setShowReviewModal(true);
-                                    } else if (manualTreatmentText.trim()) {
-                                        await handleTextSubmit();
-                                    } else {
-                                        if (Platform.OS === 'web') window.alert('Grave o áudio ou digite o texto primeiro e processe.');
-                                        else Alert.alert('Atenção', 'Grave o áudio ou digite o texto primeiro.');
-                                    }
+                                onPress={() => {
+                                    handleSubmitAction('escalate');
                                 }}
                             >
                                 <Text style={styles.actionBtnText}>⬆️ Escalar para Vice-Direção</Text>
@@ -469,7 +462,7 @@ export default function OccurrenceDetailScreen() {
                 visible={showReviewModal}
                 originalText={treatmentOriginal}
                 formalText={treatmentFormal}
-                onConfirm={handleSubmitAction}
+                onConfirm={handleConfirmReview}
                 onReRecord={() => {
                     setShowReviewModal(false);
                     setTreatmentOriginal('');

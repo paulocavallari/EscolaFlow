@@ -60,6 +60,7 @@ interface AudioRecorderProps {
 
 export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, onCancelProcessing }: AudioRecorderProps) {
     const [isRecording, setIsRecording] = useState(false);
+    const [isReviewing, setIsReviewing] = useState(false);
     const [transcript, setTranscript] = useState('');
     const [permissionGranted, setPermissionGranted] = useState(false);
 
@@ -78,6 +79,9 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
     useSpeechRecognitionEvent('error', (event) => {
         console.error('Speech recognition error:', event.error, event.message);
         setIsRecording(false);
+        if (transcript.trim()) {
+            setIsReviewing(true);
+        }
     });
 
     useSpeechRecognitionEvent('result', (event) => {
@@ -111,6 +115,7 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
 
     const startRecording = useCallback(async () => {
         setTranscript('');
+        setIsReviewing(false);
         try {
             await ExpoSpeechRecognitionModule.start({
                 lang: 'pt-BR',
@@ -127,13 +132,21 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
 
     const stopRecording = useCallback(() => {
         ExpoSpeechRecognitionModule.stop();
-        // Give it a tiny delay to flush final results before passing it up
-        setTimeout(() => {
-            if (transcript.trim()) {
-                onTranscriptionComplete(transcript.trim());
-            }
-        }, 300);
+        if (transcript.trim()) {
+            setIsReviewing(true);
+        }
+    }, [transcript]);
+
+    const handleConfirm = useCallback(() => {
+        if (transcript.trim()) {
+            onTranscriptionComplete(transcript.trim());
+        }
     }, [onTranscriptionComplete, transcript]);
+
+    const handleDiscard = useCallback(() => {
+        setTranscript('');
+        setIsReviewing(false);
+    }, []);
 
     if (!permissionGranted) {
         return (
@@ -159,32 +172,51 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
                 </View>
             )}
 
-            <TouchableOpacity
-                onPress={isRecording ? stopRecording : startRecording}
-                activeOpacity={0.7}
-            >
-                <Animated.View
-                    style={[
-                        styles.recordButton,
-                        isRecording && styles.recordButtonActive,
-                        { transform: [{ scale: pulseAnim }] },
-                    ]}
-                >
-                    {isRecording ? (
-                        <View style={styles.stopIcon} />
-                    ) : (
-                        <View style={styles.micIcon}>
-                            <Text style={styles.micText}>🎙️</Text>
-                        </View>
-                    )}
-                </Animated.View>
-            </TouchableOpacity>
+            {isReviewing ? (
+                <View style={styles.reviewActions}>
+                    <TouchableOpacity
+                        style={[styles.reviewBtn, styles.discardBtn]}
+                        onPress={handleDiscard}
+                    >
+                        <Text style={styles.discardBtnText}>🗑️ Descartar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.reviewBtn, styles.confirmBtn]}
+                        onPress={handleConfirm}
+                    >
+                        <Text style={styles.confirmBtnText}>✨ Processar</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                <>
+                    <TouchableOpacity
+                        onPress={isRecording ? stopRecording : startRecording}
+                        activeOpacity={0.7}
+                    >
+                        <Animated.View
+                            style={[
+                                styles.recordButton,
+                                isRecording && styles.recordButtonActive,
+                                { transform: [{ scale: pulseAnim }] },
+                            ]}
+                        >
+                            {isRecording ? (
+                                <View style={styles.stopIcon} />
+                            ) : (
+                                <View style={styles.micIcon}>
+                                    <Text style={styles.micText}>🎙️</Text>
+                                </View>
+                            )}
+                        </Animated.View>
+                    </TouchableOpacity>
 
-            <Text style={styles.hint}>
-                {isRecording
-                    ? 'Toque para parar a gravação'
-                    : 'Toque para gravar a ocorrência'}
-            </Text>
+                    <Text style={styles.hint}>
+                        {isRecording
+                            ? 'Toque para pausar'
+                            : 'Toque para gravar a ocorrência'}
+                    </Text>
+                </>
+            )}
         </View>
     );
 }
@@ -281,6 +313,41 @@ const styles = StyleSheet.create({
         color: COLORS.textSecondary,
         lineHeight: 24,
         fontStyle: 'italic',
+    },
+    reviewActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+        marginTop: 16,
+    },
+    reviewBtn: {
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    confirmBtn: {
+        backgroundColor: COLORS.primary,
+    },
+    confirmBtnText: {
+        color: COLORS.white,
+        fontSize: 15,
+        fontWeight: 'bold',
+        marginLeft: 8,
+    },
+    discardBtn: {
+        backgroundColor: COLORS.border + '40',
+        borderWidth: 1,
+        borderColor: COLORS.border,
+    },
+    discardBtnText: {
+        color: COLORS.error,
+        fontSize: 15,
+        fontWeight: '600',
+        marginLeft: 8,
     },
 });
 
