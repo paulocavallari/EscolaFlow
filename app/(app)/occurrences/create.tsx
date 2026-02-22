@@ -1,11 +1,12 @@
 // app/(app)/occurrences/create.tsx
 // New occurrence creation screen with audio recording flow
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import {
     View,
     Text,
     ScrollView,
+    FlatList,
     TouchableOpacity,
     StyleSheet,
     TextInput,
@@ -17,11 +18,35 @@ import { router } from 'expo-router';
 import { AudioRecorder } from '../../../src/components/AudioRecorder';
 import { AIReviewModal } from '../../../src/components/AIReviewModal';
 import { useStudentsList, useClassesList } from '../../../src/hooks/useStudents';
-import { useCreateOccurrence, useProcessAudio, useProcessText } from '../../../src/hooks/useOccurrences';
+import { useCreateOccurrence, useProcessText } from '../../../src/hooks/useOccurrences';
 import { useProfile } from '../../../src/hooks/useProfile';
 import { COLORS } from '../../../src/lib/constants';
 import { Student, StudentWithRelations } from '../../../src/types/database';
 import { sendWhatsAppMessage } from '../../../src/services/whatsappService';
+
+// Memoized student list item for better performance
+const StudentItem = memo(function StudentItem({
+    student,
+    isSelected,
+    onPress,
+}: {
+    student: StudentWithRelations;
+    isSelected: boolean;
+    onPress: (s: StudentWithRelations) => void;
+}) {
+    return (
+        <TouchableOpacity
+            style={[styles.studentItem, isSelected && styles.studentItemSelected]}
+            onPress={() => onPress(student)}
+        >
+            <View>
+                <Text style={styles.studentName}>{student.name}</Text>
+                <Text style={styles.studentClass}>{student.matricula ?? 'Sem matrícula'}</Text>
+            </View>
+            {isSelected && <Text style={styles.checkMark}>✓</Text>}
+        </TouchableOpacity>
+    );
+});
 
 type Step = 'select_student' | 'record_audio' | 'review';
 
@@ -44,7 +69,6 @@ export default function CreateOccurrenceScreen() {
     // Queries
     const { data: classes } = useClassesList();
     const { data: students } = useStudentsList(selectedClassId || undefined);
-    const processAudio = useProcessAudio();
     const processText = useProcessText();
     const createOccurrence = useCreateOccurrence();
 
@@ -53,24 +77,25 @@ export default function CreateOccurrenceScreen() {
         s.name.toLowerCase().includes(studentSearch.toLowerCase())
     ) ?? [];
 
-    // Handle audio recording complete
-    const handleRecordingComplete = useCallback(async (audioUri: string) => {
+    // Handle live transcription complete
+    const handleTranscriptionComplete = useCallback(async (text: string) => {
+        if (!text.trim()) return;
         try {
-            const result = await processAudio.mutateAsync(audioUri);
+            const result = await processText.mutateAsync(text);
             setOriginalText(result.original);
             setFormalText(result.formal);
             setShowReviewModal(true);
         } catch (err) {
-            console.error('Audio processing error:', err);
+            console.error('Text processing error:', err);
             Alert.alert(
                 'Erro no processamento',
                 err instanceof Error
                     ? err.message
-                    : 'Falha ao processar o áudio. Tente novamente.',
+                    : 'Falha ao processar o texto transcrito. Tente novamente.',
                 [{ text: 'OK' }]
             );
         }
-    }, [processAudio]);
+    }, [processText]);
 
     // Step 2: Input Mode
     const [inputMode, setInputMode] = useState<'audio' | 'text'>('audio');
@@ -100,9 +125,8 @@ export default function CreateOccurrenceScreen() {
 
     // Cancel processing and reset so user can re-record
     const handleCancelProcessing = useCallback(() => {
-        processAudio.reset();
         processText.reset();
-    }, [processAudio, processText]);
+    }, [processText]);
 
     // Handle AI review confirmation
     const handleConfirmText = useCallback(async (editedText: string) => {
@@ -232,25 +256,24 @@ export default function CreateOccurrenceScreen() {
                         placeholderTextColor={COLORS.textMuted}
                     />
 
-                    {/* Student list */}
-                    {filteredStudents.map((student) => (
-                        <TouchableOpacity
-                            key={student.id}
-                            style={[
-                                styles.studentItem,
-                                selectedStudent?.id === student.id && styles.studentItemSelected,
-                            ]}
-                            onPress={() => setSelectedStudent(student)}
-                        >
-                            <View>
-                                <Text style={styles.studentName}>{student.name}</Text>
-                                <Text style={styles.studentClass}>{student.matricula ?? 'Sem matrícula'}</Text>
-                            </View>
-                            {selectedStudent?.id === student.id && (
-                                <Text style={styles.checkMark}>✓</Text>
-                            )}
-                        </TouchableOpacity>
-                    ))}
+                    {/* Student FlatList */}
+                    <FlatList
+                        data={filteredStudents}
+                        keyExtractor={(item) => item.id}
+                        renderItem={({ item: student }) => (
+                            <StudentItem
+                                student={student}
+                                isSelected={selectedStudent?.id === student.id}
+                                onPress={setSelectedStudent}
+                            />
+                        )}
+                        ListEmptyComponent={
+                            <Text style={styles.emptyListText}>Nenhum aluno encontrado.</Text>
+                        }
+                        keyboardShouldPersistTaps="handled"
+                        scrollEnabled={false}
+                        style={{ maxHeight: 320 }}
+                    />
 
                     {selectedStudent && (
                         <TouchableOpacity
@@ -288,8 +311,8 @@ export default function CreateOccurrenceScreen() {
 
                     {inputMode === 'audio' ? (
                         <AudioRecorder
-                            onRecordingComplete={handleRecordingComplete}
-                            isProcessing={processAudio.isPending}
+                            onTranscriptionComplete={handleTranscriptionComplete}
+                            isProcessing={processText.isPending}
                             onCancelProcessing={handleCancelProcessing}
                         />
                     ) : (
@@ -590,5 +613,11 @@ const styles = StyleSheet.create({
         color: COLORS.textSecondary,
         fontSize: 12,
         fontWeight: '600',
+    },
+    emptyListText: {
+        textAlign: 'center',
+        color: COLORS.textMuted,
+        paddingVertical: 16,
+        fontSize: 14,
     },
 });

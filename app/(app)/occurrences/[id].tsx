@@ -14,7 +14,7 @@ import {
     TextInput,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useOccurrenceDetail, useAddAction, useUpdateAction, useProcessAudio, useProcessText, useDeleteOccurrence } from '../../../src/hooks/useOccurrences';
+import { useOccurrenceDetail, useAddAction, useUpdateAction, useProcessText, useDeleteOccurrence } from '../../../src/hooks/useOccurrences';
 import { generateOccurrencePDF } from '../../../src/utils/pdfGenerator';
 import { useProfile } from '../../../src/hooks/useProfile';
 import { StatusBadge } from '../../../src/components/StatusBadge';
@@ -33,7 +33,7 @@ export default function OccurrenceDetailScreen() {
 
     const { data: occurrence, isLoading } = useOccurrenceDetail(id ?? '');
     const addAction = useAddAction();
-    const processAudio = useProcessAudio();
+    const processText = useProcessText();
 
     // Treatment state
     const [showTreatment, setShowTreatment] = useState(false);
@@ -59,16 +59,17 @@ export default function OccurrenceDetailScreen() {
     );
 
     // Handle recorded audio for treatment
-    const handleTreatmentAudio = useCallback(async (audioUri: string) => {
+    const handleTranscriptionComplete = useCallback(async (text: string) => {
+        if (!text.trim()) return;
         try {
-            const result = await processAudio.mutateAsync(audioUri);
+            const result = await processText.mutateAsync(text);
             setTreatmentOriginal(result.original);
             setTreatmentFormal(result.formal);
             setShowReviewModal(true);
         } catch (err) {
-            Alert.alert('Erro', 'Falha ao processar o áudio.');
+            Alert.alert('Erro', 'Falha ao processar texto.');
         }
-    }, [processAudio]);
+    }, [processText]);
 
     const deleteOccurrence = useDeleteOccurrence();
 
@@ -363,8 +364,8 @@ export default function OccurrenceDetailScreen() {
                     <Text style={styles.treatmentTitle}>🎙️ Gravar Providência</Text>
 
                     <AudioRecorder
-                        onRecordingComplete={handleTreatmentAudio}
-                        isProcessing={processAudio.isPending}
+                        onTranscriptionComplete={handleTranscriptionComplete}
+                        isProcessing={processText.isPending}
                     />
 
                     <Text style={styles.orDivider}>- OU -</Text>

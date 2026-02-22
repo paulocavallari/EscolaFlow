@@ -11,34 +11,79 @@ import {
     ActivityIndicator,
     Platform,
 } from 'react-native';
-import { Audio } from 'expo-av';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { COLORS } from '../lib/constants';
 
+const PROCESSING_MESSAGES = [
+    'Analisando áudio...',
+    'Transcrevendo relato...',
+    'Formalizando texto...',
+    'Quase pronto...',
+];
+
+function ProcessingView({ onCancel }: { onCancel?: () => void }) {
+    const [msgIndex, setMsgIndex] = useState(0);
+    const [elapsed, setElapsed] = useState(0);
+
+    useEffect(() => {
+        const msgTimer = setInterval(() => {
+            setMsgIndex((i) => (i + 1) % PROCESSING_MESSAGES.length);
+        }, 2200);
+        const elapsedTimer = setInterval(() => {
+            setElapsed((s) => s + 1);
+        }, 1000);
+        return () => {
+            clearInterval(msgTimer);
+            clearInterval(elapsedTimer);
+        };
+    }, []);
+
+    return (
+        <View style={styles.container}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.processingText}>{PROCESSING_MESSAGES[msgIndex]}</Text>
+            <Text style={styles.processingSubtext}>{elapsed}s — aguarde</Text>
+            {onCancel && (
+                <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+                    <Text style={styles.cancelButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+            )}
+        </View>
+    );
+}
+
 interface AudioRecorderProps {
-    onRecordingComplete: (uri: string) => void;
+    onTranscriptionComplete: (text: string) => void;
     isProcessing?: boolean;
     onCancelProcessing?: () => void;
 }
 
-export function AudioRecorder({ onRecordingComplete, isProcessing = false, onCancelProcessing }: AudioRecorderProps) {
+export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, onCancelProcessing }: AudioRecorderProps) {
     const [isRecording, setIsRecording] = useState(false);
-    const [recordingDuration, setRecordingDuration] = useState(0);
+    const [transcript, setTranscript] = useState('');
     const [permissionGranted, setPermissionGranted] = useState(false);
-    const recordingRef = useRef<Audio.Recording | null>(null);
+
     const pulseAnim = useRef(new Animated.Value(1)).current;
-    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Request permissions on mount
     useEffect(() => {
         (async () => {
-            const { status } = await Audio.requestPermissionsAsync();
+            const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
             setPermissionGranted(status === 'granted');
         })();
-
-        return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
-        };
     }, []);
+
+    useSpeechRecognitionEvent('start', () => setIsRecording(true));
+    useSpeechRecognitionEvent('end', () => setIsRecording(false));
+    useSpeechRecognitionEvent('error', (event) => {
+        console.error('Speech recognition error:', event.error, event.message);
+        setIsRecording(false);
+    });
+
+    useSpeechRecognitionEvent('result', (event) => {
+        const newTranscript = event.results.map(r => r.transcript).join('');
+        setTranscript(newTranscript);
+    });
 
     // Pulse animation while recording
     useEffect(() => {
@@ -65,56 +110,30 @@ export function AudioRecorder({ onRecordingComplete, isProcessing = false, onCan
     }, [isRecording, pulseAnim]);
 
     const startRecording = useCallback(async () => {
+        setTranscript('');
         try {
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true,
-                playsInSilentModeIOS: true,
+            await ExpoSpeechRecognitionModule.start({
+                lang: 'pt-BR',
+                interimResults: true,
+                maxAlternatives: 1,
+                continuous: true,
+                requiresOnDeviceRecognition: false, // Fallback to cloud if local model not downloaded
             });
-
-            const { recording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
-            );
-
-            recordingRef.current = recording;
-            setIsRecording(true);
-            setRecordingDuration(0);
-
-            // Start timer
-            timerRef.current = setInterval(() => {
-                setRecordingDuration((prev) => prev + 1);
-            }, 1000);
         } catch (err) {
-            console.error('Failed to start recording:', err);
+            console.error('Failed to start speech recognition:', err);
+            setIsRecording(false);
         }
     }, []);
 
-    const stopRecording = useCallback(async () => {
-        try {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-                timerRef.current = null;
+    const stopRecording = useCallback(() => {
+        ExpoSpeechRecognitionModule.stop();
+        // Give it a tiny delay to flush final results before passing it up
+        setTimeout(() => {
+            if (transcript.trim()) {
+                onTranscriptionComplete(transcript.trim());
             }
-
-            if (recordingRef.current) {
-                setIsRecording(false);
-                await recordingRef.current.stopAndUnloadAsync();
-                const uri = recordingRef.current.getURI();
-                recordingRef.current = null;
-
-                if (uri) {
-                    onRecordingComplete(uri);
-                }
-            }
-        } catch (err) {
-            console.error('Failed to stop recording:', err);
-        }
-    }, [onRecordingComplete]);
-
-    const formatDuration = (seconds: number): string => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    };
+        }, 300);
+    }, [onTranscriptionComplete, transcript]);
 
     if (!permissionGranted) {
         return (
@@ -127,29 +146,17 @@ export function AudioRecorder({ onRecordingComplete, isProcessing = false, onCan
     }
 
     if (isProcessing) {
-        return (
-            <View style={styles.container}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-                <Text style={styles.processingText}>Processando áudio com IA...</Text>
-                <Text style={styles.processingSubtext}>
-                    Transcrevendo e reescrevendo formalmente
-                </Text>
-                {onCancelProcessing && (
-                    <TouchableOpacity
-                        style={styles.cancelButton}
-                        onPress={onCancelProcessing}
-                    >
-                        <Text style={styles.cancelButtonText}>Cancelar</Text>
-                    </TouchableOpacity>
-                )}
-            </View>
-        );
+        return <ProcessingView onCancel={onCancelProcessing} />;
     }
 
     return (
         <View style={styles.container}>
-            {isRecording && (
-                <Text style={styles.duration}>{formatDuration(recordingDuration)}</Text>
+            {!!transcript && (
+                <View style={styles.transcriptBox}>
+                    <Text style={[styles.transcriptText, !isRecording && { color: COLORS.textPrimary }]}>
+                        {transcript}
+                    </Text>
+                </View>
             )}
 
             <TouchableOpacity
@@ -260,6 +267,20 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: COLORS.textSecondary,
         fontWeight: '500',
+    },
+    transcriptBox: {
+        backgroundColor: COLORS.border + '40',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 24,
+        width: '100%',
+        minHeight: 80,
+    },
+    transcriptText: {
+        fontSize: 16,
+        color: COLORS.textSecondary,
+        lineHeight: 24,
+        fontStyle: 'italic',
     },
 });
 

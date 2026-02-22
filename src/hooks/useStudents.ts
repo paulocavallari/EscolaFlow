@@ -61,6 +61,8 @@ export function useStudentsList(classId?: string) {
             if (error) throw error;
             return (data ?? []) as unknown as StudentWithRelations[];
         },
+        staleTime: 120_000,
+        gcTime: 600_000,
     });
 }
 
@@ -187,6 +189,8 @@ export function useClassesList() {
             if (error) throw error;
             return (data ?? []) as Class[];
         },
+        staleTime: 300_000,  // 5 min — classes rarely change
+        gcTime: 900_000,
     });
 }
 
@@ -269,6 +273,8 @@ export function useProfilesList() {
             if (error) throw error;
             return (data ?? []) as Profile[];
         },
+        staleTime: 120_000,
+        gcTime: 600_000,
     });
 }
 
@@ -286,6 +292,8 @@ export function useTutorsList() {
             if (error) throw error;
             return (data ?? []) as Profile[];
         },
+        staleTime: 120_000,
+        gcTime: 600_000,
     });
 }
 
