@@ -85,7 +85,7 @@ Analise o áudio e faça as seguintes tarefas, respondendo SOMENTE com um objeto
 Diretrizes para a reescrita formal:
 - Tom: Direto, objetivo e imparcial. Evite palavras muito rebuscadas ou redundâncias.
 - Tempo Verbal: Use SEMPRE o PASSADO SIMPLES (Pretérito Perfeito). Exemplo: "O aluno chutou" (ERRADO: "foi encontrado chutando" ou "estava chutando").
-- Fidelidade: Mantenha apenas os fatos relatados. NÃO invente nomes, regras ou punições.
+- Fidelidade e Tamanho: Mantenha TODOS os fatos relatados. NÃO invente nomes, regras ou punições. NÃO RESUMA O TEXTO. Reescreva todo o conteúdo original preservando todas as informações.
 
 Responda APENAS com o JSON, sem markdown, sem explicações, sem blocos de código.
 Exemplo de resposta esperada: {"original":"o aluno gabriel tava chutando a porta e nao quis entrar","formal":"O aluno Gabriel chutou a porta da sala de aula e recusou-se a entrar."}`;

@@ -73,7 +73,7 @@ serve(async (req: Request) => {
 Diretrizes:
 1. Tom: Direto, objetivo e imparcial. Evite palavras muito rebuscadas ou redundâncias.
 2. Tempo Verbal: Use SEMPRE o PASSADO SIMPLES (Pretérito Perfeito). Exemplo: "O aluno chutou" (ERRADO: "foi encontrado chutando" ou "estava chutando").
-3. Fidelidade: Mantenha apenas os fatos relatados. NÃO invente nomes, regras ou punições.
+3. Fidelidade e Tamanho: Mantenha TODOS os fatos relatados. NÃO invente nomes, regras ou punições. NÃO RESUMA O TEXTO. Reescreva todo o conteúdo original preservando todas as informações.
 4. Exemplo de saída esperada: "O aluno Gabriel chutou a porta da sala de aula. Mesmo após o professor adverti-lo verbalmente, o aluno recusou-se a entrar na sala."
 5. Formato: Retorne APENAS o texto reescrito. Nada de aspas, saudações ou explicações.
 
@@ -92,7 +92,7 @@ Texto original:
           'X-Title': 'EscolaFlow' // Optional, for OpenRouter analytics
         },
         body: JSON.stringify({
-          model: "google/gemma-3-4b-it:free",
+          model: "google/gemma-3-12b-it:free",
           messages: [
             {
               role: 'user',
