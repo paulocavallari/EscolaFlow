@@ -10,26 +10,47 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 /**
- * Reads an expo-asset and returns it as a base64 Data URI.
- * Uses fetch + ArrayBuffer (avoids FileReader callback issues on web).
+ * Returns a base64 Data URI for the school header image.
+ * - Web: fetches from Vercel's served public asset path
+ * - Mobile: loads via expo-asset
+ * Returns '' if image is unavailable or is a placeholder stub.
  */
-async function assetToBase64DataUri(module: number, mimeType = 'image/jpeg'): Promise<string> {
-  const asset = Asset.fromModule(module);
-  await asset.downloadAsync();
-  const uri = asset.localUri || asset.uri;
+async function getHeaderImageDataUri(): Promise<string> {
+  try {
+    let uri: string;
 
-  const response = await fetch(uri);
-  const buffer = await response.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
+    if (Platform.OS === 'web') {
+      // On Vercel/web, assets are served from the app root
+      uri = '/assets/images/cabecalho-vc.jpg';
+    } else {
+      const asset = Asset.fromModule(
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        require('../../assets/images/cabecalho-vc.jpg')
+      );
+      await asset.downloadAsync();
+      uri = asset.localUri || asset.uri;
+    }
 
-  // Convert in chunks to avoid call-stack overflow on large files
-  const chunkSize = 8192;
-  const parts: string[] = [];
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    parts.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)));
+    const response = await fetch(uri);
+    if (!response.ok) return '';
+
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength < 200) return ''; // skip placeholder stubs
+
+    const bytes = new Uint8Array(buffer);
+    // Check for GIF magic bytes (placeholder) — 47 49 46 = 'GIF'
+    if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return '';
+
+    const chunkSize = 8192;
+    const parts: string[] = [];
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      parts.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)));
+    }
+    return `data:image/jpeg;base64,${btoa(parts.join(''))}`;
+  } catch (err) {
+    console.warn('[PDF] Header image load failed:', err);
+    return '';
   }
-  const base64 = btoa(parts.join(''));
-  return `data:${mimeType};base64,${base64}`;
 }
 
 const ACTION_TYPE_LABEL: Record<string, string> = {
@@ -52,11 +73,9 @@ function formatActionRows(actions: OccurrenceWithRelations['actions']): string {
 }
 
 export async function generateOccurrencePDF(occurrence: OccurrenceWithRelations): Promise<void> {
-  // Load school header as base64 so it renders inside printed HTML without network dependency
   let headerImgSrc = '';
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    headerImgSrc = await assetToBase64DataUri(require('../../assets/images/cabecalho-vc.jpg'));
+    headerImgSrc = await getHeaderImageDataUri();
   } catch (err) {
     console.warn('[PDF] Could not load header image:', err);
   }
