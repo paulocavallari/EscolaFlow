@@ -93,7 +93,7 @@ Texto original para revisão:
           'X-Title': 'EscolaFlow' // Optional, for OpenRouter analytics
         },
         body: JSON.stringify({
-          model: "nvidia/nemotron-nano-9b-v2:free",
+          model: "google/gemma-3-4b-it:free",
           messages: [
             {
               role: 'user',
