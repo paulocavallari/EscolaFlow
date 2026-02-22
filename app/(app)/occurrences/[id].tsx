@@ -353,31 +353,7 @@ export default function OccurrenceDetailScreen() {
                         style={styles.treatButton}
                         onPress={() => setShowTreatment(true)}
                     >
-                        <Text style={styles.treatButtonText}>📝 Descrever e Formalizar Tratativa</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={[styles.treatButton, { backgroundColor: COLORS.success, marginTop: 12 }]}
-                        onPress={() => {
-                            if (Platform.OS === 'web') {
-                                if (window.confirm("Deseja marcar essa ocorrência como concluída diretamente?")) {
-                                    setPendingActionType(role === UserRole.VICE_DIRECTOR ? 'vp_resolve' : 'resolve');
-                                    handleSubmitAction(`Ocorrência averiguada e concluída diretamente por ${role === UserRole.VICE_DIRECTOR ? 'Vice-Diretor(a)' : 'Tutor(a)'}.`);
-                                }
-                            } else {
-                                Alert.alert("Concluir Ocorrência", "Deseja marcar essa ocorrência como concluída diretamente?", [
-                                    { text: "Cancelar", style: "cancel" },
-                                    {
-                                        text: "Sim, Concluir", onPress: () => {
-                                            setPendingActionType(role === UserRole.VICE_DIRECTOR ? 'vp_resolve' : 'resolve');
-                                            handleSubmitAction(`Ocorrência averiguada e concluída diretamente por ${role === UserRole.VICE_DIRECTOR ? 'Vice-Diretor(a)' : 'Tutor(a)'}.`);
-                                        }
-                                    }
-                                ]);
-                            }
-                        }}
-                    >
-                        <Text style={styles.treatButtonText}>✅ Marcar como Concluída</Text>
+                        <Text style={styles.treatButtonText}>📝 Inserir Parecer e Concluir / Encaminhar</Text>
                     </TouchableOpacity>
                 </View>
             )}
