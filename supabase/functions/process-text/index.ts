@@ -81,39 +81,69 @@ Texto original:
 "${textToProcess}"
 `;
 
-    const rewriteResponse = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openRouterApiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://escolaflow.com.br', // Optional, for OpenRouter analytics
-          'X-Title': 'EscolaFlow' // Optional, for OpenRouter analytics
-        },
-        body: JSON.stringify({
-          model: "google/gemma-3-12b-it:free",
-          messages: [
-            {
-              role: 'user',
-              content: formalRewritePrompt,
-            },
-          ],
-          temperature: 0.2,
-          max_tokens: 1024,
-        }),
-      }
-    );
+    const modelsToTry = [
+      "google/gemma-3-12b-it:free",
+      "google/gemma-3-4b-it:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "qwen/qwen-2.5-coder-32b-instruct:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
+      "nvidia/nemotron-mini-4b-instruct:free",
+      "microsoft/phi-3-mini-128k-instruct:free"
+    ];
 
-    if (!rewriteResponse.ok) {
-      const errBody = await rewriteResponse.text();
-      console.error('Gemini rewrite error:', errBody);
+    let rewriteResponse: Response | null = null;
+    let fallbackError: any = null;
+    let usedModel = "";
+
+    for (const model of modelsToTry) {
+      console.log(`[OpenRouter] Trying model: ${model}`);
+      try {
+        rewriteResponse = await fetch(
+          "https://openrouter.ai/api/v1/chat/completions",
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openRouterApiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://escolaflow.com.br',
+              'X-Title': 'EscolaFlow'
+            },
+            body: JSON.stringify({
+              model: model,
+              messages: [
+                {
+                  role: 'user',
+                  content: formalRewritePrompt,
+                },
+              ],
+              temperature: 0.2,
+              max_tokens: 1024,
+            }),
+          }
+        );
+
+        if (rewriteResponse.ok) {
+          usedModel = model;
+          break; // success, break loop
+        }
+
+        const errBody = await rewriteResponse.text();
+        console.warn(`[OpenRouter] Model ${model} failed (HTTP ${rewriteResponse.status}):`, errBody);
+        fallbackError = errBody;
+      } catch (fetchErr: any) {
+        console.error(`[OpenRouter] Exception on model ${model}:`, fetchErr.message);
+        fallbackError = fetchErr.message;
+      }
+    }
+
+    if (!rewriteResponse || !rewriteResponse.ok) {
+      console.error('All fallback models failed. Last error:', fallbackError);
 
       return new Response(JSON.stringify({
         original: textToProcess,
         formal: textToProcess,
         error: 'Formalization failed, returning original text instead',
-        details: errBody
+        details: fallbackError
       }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -131,7 +161,7 @@ Texto original:
       console.warn('OpenRouter rewrite returned no content, using original.', rewriteData);
     }
 
-    console.log(`Rewritten formal text(${formalText.length} chars).`);
+    console.log(`Rewritten formal text(${formalText.length} chars) using model: ${usedModel}`);
     // Success response matching Audio result
     return new Response(JSON.stringify({
       original: textToProcess,
