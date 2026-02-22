@@ -37,8 +37,11 @@ serve(async (req: Request) => {
         );
 
         const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-        if (authError || !user) {
-            return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+
+        // In local development or anon usage, we might not have a full user.
+        // If authError says "Invalid JWT", it might be the anon key.
+        if (authError && authError.message !== 'Invalid JWT' && authError.message !== 'Auth session missing!') {
+            return new Response(JSON.stringify({ error: 'Unauthorized', details: authError.message }), {
                 status: 401,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
