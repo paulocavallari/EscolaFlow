@@ -61,7 +61,8 @@ interface AudioRecorderProps {
 export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, onCancelProcessing }: AudioRecorderProps) {
     const [isRecording, setIsRecording] = useState(false);
     const [isReviewing, setIsReviewing] = useState(false);
-    const [transcript, setTranscript] = useState('');
+    const [finalTranscript, setFinalTranscript] = useState('');
+    const [interimTranscript, setInterimTranscript] = useState('');
     const [permissionGranted, setPermissionGranted] = useState(false);
 
     const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -77,17 +78,29 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
     useSpeechRecognitionEvent('start', () => setIsRecording(true));
     useSpeechRecognitionEvent('end', () => setIsRecording(false));
     useSpeechRecognitionEvent('error', (event) => {
+        // If it's a "no-match" or "speech-timeout" error, it just means the user paused for too long.
+        // We shouldn't stop recording completely, or if we do due to OS limits, we let the user resume.
+        // However, on iOS, the speech API often stops entirely on silence. 
+        // We'll trust the 'end' event to actually flip isRecording.
         console.error('Speech recognition error:', event.error, event.message);
-        setIsRecording(false);
-        if (transcript.trim()) {
-            setIsReviewing(true);
-        }
     });
 
     useSpeechRecognitionEvent('result', (event) => {
-        const newTranscript = event.results.map(r => r.transcript).join('');
-        setTranscript(newTranscript);
+        const currentInterim = event.results.map(r => r.transcript).join('');
+
+        if (event.isFinal) {
+            setFinalTranscript((prev) => {
+                const separator = prev ? ' ' : '';
+                return prev + separator + currentInterim;
+            });
+            setInterimTranscript('');
+        } else {
+            setInterimTranscript(currentInterim);
+        }
     });
+
+    // Combined transcript for display
+    const transcript = [finalTranscript, interimTranscript].filter(Boolean).join(' ');
 
     // Pulse animation while recording
     useEffect(() => {
@@ -114,7 +127,8 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
     }, [isRecording, pulseAnim]);
 
     const startRecording = useCallback(async () => {
-        setTranscript('');
+        // We DO NOT clear the transcript here! This allows resuming a paused recording.
+        // If it was reviewing, we just go back to recording and append.
         setIsReviewing(false);
         try {
             await ExpoSpeechRecognitionModule.start({
@@ -144,7 +158,8 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
     }, [onTranscriptionComplete, transcript]);
 
     const handleDiscard = useCallback(() => {
-        setTranscript('');
+        setFinalTranscript('');
+        setInterimTranscript('');
         setIsReviewing(false);
     }, []);
 
