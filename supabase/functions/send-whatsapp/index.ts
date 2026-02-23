@@ -22,6 +22,47 @@ interface NotificationPayload {
 }
 
 /**
+ * Summarize the occurrence formal description using Gemini API
+ */
+async function summarizeWithGemini(text: string): Promise<string> {
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiApiKey || !text) return '';
+
+    const prompt = `Você é um coordenador pedagógico da Escola Estadual Virgílio Capoani comunicando-se com os responsáveis de um aluno via WhatsApp.
+Por favor, faça um pequeno resumo (máximo de 2 a 3 frases) da seguinte ocorrência disciplinar. O tom deve ser estritamente profissional, respeitoso, transmitindo clareza e seriedade, sem ser excessivamente punitivo ou alarmista.
+IMPORTANTE: Não inclua saudações (como "Olá", "Prezados"), nem despedidas. Retorne APENAS o parágrafo de resumo.
+
+Ocorrência Registrada:
+"${text}"`;
+
+    try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.3,
+                    maxOutputTokens: 250,
+                }
+            })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            const content = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (content) return content;
+        } else {
+            console.error('Gemini summary error:', await response.text());
+        }
+    } catch (error) {
+        console.error('Gemini summary exception:', error);
+    }
+    return '';
+}
+
+/**
  * Send a text message via Evolution API
  */
 async function sendEvolutionMessage(
@@ -164,6 +205,18 @@ serve(async (req: Request) => {
 
             // 3. Ocorrência marcada como concluída
             if (newStatus === 'CONCLUDED') {
+                // Fetch the formal description to summarize to the guardian
+                let statementSummary = '';
+                const { data: occData } = await supabaseAdmin
+                    .from('occurrences')
+                    .select('description_formal')
+                    .eq('id', payload.occurrence_id)
+                    .single();
+
+                if (occData?.description_formal) {
+                    statementSummary = await summarizeWithGemini(occData.description_formal);
+                }
+
                 // Concluída pelo VP (was ESCALATED_VP) ou Tutor (was PENDING_TUTOR)
                 if (oldStatus === 'ESCALATED_VP') {
                     const message = `✅ *Ocorrência Concluída*\n\nPrezado(a),\n\nInformamos que a ocorrência referente ao aluno *${studentName}* teve seu acompanhamento concluído pela Vice-Direção.\n\n*Síntese das providências:*\n${resolutionText}`;
@@ -188,7 +241,14 @@ serve(async (req: Request) => {
 
                 // Notificar o Responsável Pela Conclusão INDEPENDENTE de quem concluiu
                 if (student?.guardian_phone) {
-                    const guardianMessage = `🏫 *Escola Estadual Virgílio Capoani*\n\nPrezado(a) responsável,\nInformamos que o acompanhamento da ocorrência disciplinar referente ao aluno *${studentName}* foi finalizado.\n\nA equipe pedagógica encontra-se à disposição para eventuais esclarecimentos.\n\nAgradecemos a sua colaboração.`;
+                    let guardianMessage = `🏫 *Escola Estadual Virgílio Capoani*\n\nPrezado(a) responsável,\nInformamos que o acompanhamento disciplinar referente ao aluno *${studentName}* foi finalizado.`;
+
+                    if (statementSummary) {
+                        guardianMessage += `\n\n*Resumo da Ocorrência:*\n${statementSummary}`;
+                    }
+
+                    guardianMessage += `\n\n*Providências Tomadas:*\n${resolutionText}`;
+                    guardianMessage += `\n\nA equipe pedagógica encontra-se à disposição para eventuais esclarecimentos.\n\nAgradecemos a sua colaboração.`;
 
                     const rg = await sendEvolutionMessage(student.guardian_phone, guardianMessage);
                     results.push({ recipient: 'guardian_concluded', ...rg });
