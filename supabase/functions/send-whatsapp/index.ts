@@ -30,7 +30,7 @@ async function summarizeWithGemini(text: string): Promise<string> {
 
     const prompt = `Você é um coordenador pedagógico da Escola Estadual Virgílio Capoani comunicando-se com os responsáveis de um aluno via WhatsApp.
 Por favor, faça um pequeno resumo (máximo de 2 a 3 frases) da seguinte ocorrência disciplinar. O tom deve ser estritamente profissional, respeitoso, transmitindo clareza e seriedade, sem ser excessivamente punitivo ou alarmista.
-IMPORTANTE: Não inclua saudações (como "Olá", "Prezados"), nem despedidas. Retorne APENAS o parágrafo de resumo.
+IMPORTANTE: Não inclua saudações (como "Olá", "Prezados"), nem despedidas. Retorne APENAS o parágrafo de resumo. O resumo deve ser escrito EXCLUSIVAMENTE em Português do Brasil.
 
 Ocorrência Registrada:
 "${text}"`;
