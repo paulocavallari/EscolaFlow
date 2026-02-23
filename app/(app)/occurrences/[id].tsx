@@ -49,11 +49,21 @@ export default function OccurrenceDetailScreen() {
     const canTreat = Boolean(
         occurrence &&
         profileId &&
-        occurrence.status !== OccurrenceStatus.CONCLUDED &&
         (
-            occurrence.tutor_id === profileId ||
-            role === UserRole.VICE_DIRECTOR ||
-            role === UserRole.ADMIN
+            // pending/escalated logic
+            (
+                occurrence.status !== OccurrenceStatus.CONCLUDED &&
+                (
+                    occurrence.tutor_id === profileId ||
+                    role === UserRole.VICE_DIRECTOR ||
+                    role === UserRole.ADMIN
+                )
+            ) ||
+            // reopen logic
+            (
+                occurrence.status === OccurrenceStatus.CONCLUDED &&
+                (role === UserRole.VICE_DIRECTOR || role === UserRole.ADMIN)
+            )
         )
     );
 
@@ -358,13 +368,19 @@ export default function OccurrenceDetailScreen() {
                     <Text style={styles.treatmentTitle}>
                         {occurrence.status === OccurrenceStatus.ESCALATED_VP
                             ? '🏢 Devolutiva da Vice-Direção'
-                            : '📣 Registrar Tratativa'}
+                            : occurrence.status === OccurrenceStatus.CONCLUDED
+                                ? '🔄 Reabrir Ocorrência'
+                                : '📣 Registrar Tratativa'}
                     </Text>
                     <TouchableOpacity
                         style={styles.treatButton}
                         onPress={() => setShowTreatment(true)}
                     >
-                        <Text style={styles.treatButtonText}>📝 Inserir Parecer e Concluir / Encaminhar</Text>
+                        <Text style={styles.treatButtonText}>
+                            {occurrence.status === OccurrenceStatus.CONCLUDED
+                                ? '📝 Inserir Parecer e Reabrir'
+                                : '📝 Inserir Parecer e Concluir / Encaminhar'}
+                        </Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -411,6 +427,16 @@ export default function OccurrenceDetailScreen() {
                                 }}
                             >
                                 <Text style={styles.actionBtnText}>✅ Concluir</Text>
+                            </TouchableOpacity>
+                        )}
+                        {occurrence.status === OccurrenceStatus.CONCLUDED && role === UserRole.VICE_DIRECTOR && (
+                            <TouchableOpacity
+                                style={[styles.actionBtn, styles.escalateBtn]}
+                                onPress={() => {
+                                    handleSubmitAction('escalate');
+                                }}
+                            >
+                                <Text style={styles.actionBtnText}>🔄 Reabrir Ocorrência</Text>
                             </TouchableOpacity>
                         )}
                         {occurrence.status === OccurrenceStatus.PENDING_TUTOR && role !== UserRole.VICE_DIRECTOR && (
