@@ -120,10 +120,10 @@ serve(async (req: Request) => {
             // 1. Ocorrência cadastrada -> Notificar apenas o Tutor do aluno
             if (tutor && tutor.whatsapp_number) {
                 const message =
-                    `🔔 *Nova Ocorrência Escolar*\n\n` +
-                    `Olá, ${tutor.full_name}!\n\n` +
-                    `O(a) Prof(a). ${author?.full_name ?? 'Professor'} registrou uma nova ocorrência para o seu aluno tutorado *${studentName}*.\n\n` +
-                    `Acesse o app EscolaFlow para visualizar os detalhes e tomar as providências necessárias.`;
+                    `🔔 *Ocorrência Escolar*\n\n` +
+                    `Prezado(a) ${tutor.full_name},\n\n` +
+                    `Informamos que uma nova ocorrência disciplinar foi registrada pelo docente ${author?.full_name ?? 'Professor'} referente ao aluno *${studentName}*, sob sua tutoria.\n\n` +
+                    `Solicitamos a verificação através do sistema EscolaFlow para as devidas providências.`;
 
                 const result = await sendEvolutionMessage(tutor.whatsapp_number, message);
                 results.push({ recipient: 'tutor', ...result });
@@ -139,7 +139,7 @@ serve(async (req: Request) => {
             // 2. Ocorrência encaminhada para VP -> Notificar Autor e VPs
             if (newStatus === 'ESCALATED_VP') {
                 if (author?.whatsapp_number) {
-                    const messageAutor = `🔄 *Ocorrência Escalonada*\n\nSua ocorrência referente ao aluno *${studentName}* foi escalonada para a Vice-Direção.\n\nVocê será notificado assim que houver uma resolução.`;
+                    const messageAutor = `🔄 *Ocorrência Escalonada*\n\nPrezado(a) ${author.full_name},\n\nInformamos que a ocorrência referente ao aluno *${studentName}* foi encaminhada para análise da Vice-Direção.\n\nAs atualizações sobre a resolução serão notificadas através deste canal.`;
                     const r1 = await sendEvolutionMessage(author.whatsapp_number, messageAutor);
                     results.push({ recipient: 'author_escalated', ...r1 });
                 }
@@ -154,7 +154,7 @@ serve(async (req: Request) => {
                     for (const vp of vps) {
                         if (vp.whatsapp_number) {
                             const messageVp =
-                                `🏢 *Ocorrência Encaminhada*\n\nOlá, ${vp.full_name}!\n\nUma ocorrência do(a) aluno(a) *${studentName}* (registrada por ${author?.full_name ?? 'Professor'}) foi encaminhada para sua análise.\nAcesse o app EscolaFlow.`;
+                                `🏢 *Ocorrência para Análise*\n\nPrezado(a) ${vp.full_name},\n\nInformamos o recebimento de uma ocorrência disciplinar referente ao aluno *${studentName}*, registrada pelo docente ${author?.full_name ?? 'Professor'}.\n\nEsta ocorrência demanda análise da Vice-Direção. Por gentileza, acesse o sistema EscolaFlow para acompanhamento.`;
                             const r2 = await sendEvolutionMessage(vp.whatsapp_number, messageVp);
                             results.push({ recipient: `vp_${vp.id}`, ...r2 });
                         }
@@ -164,9 +164,9 @@ serve(async (req: Request) => {
 
             // 3. Ocorrência marcada como concluída
             if (newStatus === 'CONCLUDED') {
-                // Concluída pelo VP (was ESCALATED_VP)
+                // Concluída pelo VP (was ESCALATED_VP) ou Tutor (was PENDING_TUTOR)
                 if (oldStatus === 'ESCALATED_VP') {
-                    const message = `✅ *Ocorrência Concluída (Vice-Direção)*\n\nA ocorrência do aluno *${studentName}* foi resolvida pela Vice-Direção.\n\n*Resumo da Resolução:*\n${resolutionText}`;
+                    const message = `✅ *Ocorrência Concluída*\n\nPrezado(a),\n\nInformamos que a ocorrência referente ao aluno *${studentName}* teve seu acompanhamento concluído pela Vice-Direção.\n\n*Síntese das providências:*\n${resolutionText}`;
 
                     if (author?.whatsapp_number) {
                         const r1 = await sendEvolutionMessage(author.whatsapp_number, message);
@@ -176,10 +176,9 @@ serve(async (req: Request) => {
                         const r2 = await sendEvolutionMessage(tutor.whatsapp_number, message);
                         results.push({ recipient: 'tutor_concluded_vp', ...r2 });
                     }
-                }
-                // Concluída pelo Tutor (was PENDING_TUTOR)
-                else {
-                    const message = `✅ *Ocorrência Concluída (Tutor)*\n\nA ocorrência do aluno *${studentName}* que você registrou foi resolvida pelo tutor responsável.\n\n*Resumo da Resolução:*\n${resolutionText}`;
+                } else {
+                    // FOI CONCLUÍDA PELO TUTOR
+                    const message = `✅ *Ocorrência Concluída*\n\nPrezado(a) ${author?.full_name ?? 'Professor(a)'},\n\nInformamos que a ocorrência referente ao aluno *${studentName}* teve seu acompanhamento concluído pelo tutor responsável.\n\n*Síntese das providências:*\n${resolutionText}`;
 
                     if (author?.whatsapp_number) {
                         const r1 = await sendEvolutionMessage(author.whatsapp_number, message);
@@ -187,9 +186,9 @@ serve(async (req: Request) => {
                     }
                 }
 
-                // Notificar o Responsável (Guardião)
+                // Notificar o Responsável Pela Conclusão INDEPENDENTE de quem concluiu
                 if (student?.guardian_phone) {
-                    const guardianMessage = `🏫 *Escola Estadual Virgílio Capoani*\n\nPrezado(a) responsável,\nInformamos que uma ocorrência escolar registrada envolvendo o aluno *${studentName}* foi acompanhada e concluída com sucesso.\n\nPara maiores esclarecimentos, fique à vontade para entrar em contato com a equipe pedagógica.\nObrigado pela parceria.`;
+                    const guardianMessage = `🏫 *Escola Estadual Virgílio Capoani*\n\nPrezado(a) responsável,\nInformamos que o acompanhamento da ocorrência disciplinar referente ao aluno *${studentName}* foi finalizado.\n\nA equipe pedagógica encontra-se à disposição para eventuais esclarecimentos.\n\nAgradecemos a sua colaboração.`;
 
                     const rg = await sendEvolutionMessage(student.guardian_phone, guardianMessage);
                     results.push({ recipient: 'guardian_concluded', ...rg });
