@@ -239,20 +239,8 @@ serve(async (req: Request) => {
                     }
                 }
 
-                // Notificar o Responsável Pela Conclusão INDEPENDENTE de quem concluiu
-                if (student?.guardian_phone) {
-                    let guardianMessage = `🏫 *Escola Estadual Virgílio Capoani*\n\nPrezado(a) responsável,\nInformamos que o acompanhamento disciplinar referente ao aluno *${studentName}* foi finalizado.`;
-
-                    if (statementSummary) {
-                        guardianMessage += `\n\n*Resumo da Ocorrência:*\n${statementSummary}`;
-                    }
-
-                    guardianMessage += `\n\n*Providências Tomadas:*\n${resolutionText}`;
-                    guardianMessage += `\n\nA equipe pedagógica encontra-se à disposição para eventuais esclarecimentos.\n\nAgradecemos a sua colaboração.`;
-
-                    const rg = await sendEvolutionMessage(student.guardian_phone, guardianMessage);
-                    results.push({ recipient: 'guardian_concluded', ...rg });
-                }
+                // The guardian is no longer notified automatically upon conclusion.
+                // It is now an entirely manual action triggered by the button in the UI.
             }
         }
 

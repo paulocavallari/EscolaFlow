@@ -182,16 +182,20 @@ ${(() => {
     // Open the HTML in a new window → browser handles "Save as PDF" via print dialog.
     const printWindow = window.open('', '_blank');
     if (printWindow) {
+      let printed = false;
+      const triggerPrint = () => {
+        if (printed) return;
+        printed = true;
+        printWindow.focus();
+        try { printWindow.print(); } catch (e) { console.error('Print failed', e); }
+      };
+
       printWindow.document.write(htmlContent);
       printWindow.document.close();
-      printWindow.onload = () => {
-        printWindow.focus();
-        printWindow.print();
-      };
+      printWindow.onload = triggerPrint;
+      
       // Fallback if onload doesn't fire (content already cached)
-      setTimeout(() => {
-        try { printWindow.print(); } catch { /* already triggered */ }
-      }, 1500);
+      setTimeout(triggerPrint, 1500);
     } else {
       // Popup blocked — open as HTML blob
       const blob = new Blob([htmlContent], { type: 'text/html' });
