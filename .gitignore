@@ -39,3 +39,8 @@ yarn-error.*
 
 # supabase
 supabase/.temp/
+
+# test/scratch scripts (may contain keys)
+test-models.js
+test-*.js
+scripts/apply_rls_migration.mjs
