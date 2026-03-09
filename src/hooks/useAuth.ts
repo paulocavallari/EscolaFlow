@@ -54,31 +54,38 @@ export function useAuthProvider(): AuthState {
         }
     }, []);
 
-    // Listen for auth state changes
+    // Listen for auth state changes (single source of truth)
     useEffect(() => {
-        // Get initial session
-        supabase.auth.getSession().then(({ data: { session: s } }) => {
-            setSession(s);
-            setUser(s?.user ?? null);
-            if (s?.user) {
-                fetchProfile(s.user.id).then((p) => {
-                    setProfile(p);
-                }).finally(() => {
-                    setLoading(false);
-                });
-            } else {
-                setLoading(false);
-            }
-        }).catch((err) => {
-            console.error('Session get error:', err);
-            setLoading(false);
-        });
+        let resolved = false;
 
-        // Subscribe to auth changes
+        // Safety timeout: if auth never resolves, force loading off
+        const safetyTimer = setTimeout(() => {
+            if (!resolved) {
+                console.warn('Auth initialization timed out after 5s — forcing loading off');
+                resolved = true;
+                setSession(null);
+                setUser(null);
+                setProfile(null);
+                setLoading(false);
+                // Clear any stale session that might be hanging
+                supabase.auth.signOut().catch(() => {});
+            }
+        }, 5000);
+
+        // Use onAuthStateChange as the single source of truth.
+        // The INITIAL_SESSION event fires on subscribe and replaces the need
+        // for a separate getSession() call, avoiding race conditions.
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (_event, s) => {
+            async (event, s) => {
+                // Clear the safety timeout on any auth event
+                if (!resolved) {
+                    resolved = true;
+                    clearTimeout(safetyTimer);
+                }
+
                 setSession(s);
                 setUser(s?.user ?? null);
+
                 if (s?.user) {
                     try {
                         const p = await fetchProfile(s.user.id);
@@ -94,7 +101,10 @@ export function useAuthProvider(): AuthState {
             }
         );
 
-        return () => subscription.unsubscribe();
+        return () => {
+            clearTimeout(safetyTimer);
+            subscription.unsubscribe();
+        };
     }, [fetchProfile]);
 
     const signIn = useCallback(async (email: string, password: string) => {
