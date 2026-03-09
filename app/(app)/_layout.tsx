@@ -64,7 +64,7 @@ export default function AppLayout() {
                     title: 'Início',
                     tabBarLabel: 'Início',
                     tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} />,
-                    headerTitle: 'EscolaFlow',
+                    headerTitle: 'Ocorrências VC',
                 }}
             />
             <Tabs.Screen

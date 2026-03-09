@@ -168,7 +168,7 @@ export default function CreateOccurrenceScreen() {
                     `Aluno: ${selectedStudent.name}\n` +
                     `Turma: ${selectedStudent.class?.name || 'N/A'}\n\n` +
                     `Resumo: ${editedText}\n\n` +
-                    `Acesse o app EscolaFlow para mais detalhes e para registrar a tratativa.`;
+                    `Acesse o app Ocorrências VC para mais detalhes e para registrar a tratativa.`;
                 sendWhatsAppMessage(selectedStudent.tutor.whatsapp_number, message)
                     .catch(() => { /* silent — notification failure doesn't block the flow */ });
             }

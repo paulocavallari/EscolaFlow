@@ -56,7 +56,7 @@ export default function LoginScreen() {
                 {/* Logo / Header */}
                 <View style={styles.header}>
                     <Text style={styles.logo}>📚</Text>
-                    <Text style={styles.appName}>EscolaFlow</Text>
+                    <Text style={styles.appName}>Ocorrências VC</Text>
                     <Text style={styles.tagline}>Gestão Escolar Inteligente</Text>
                 </View>
 

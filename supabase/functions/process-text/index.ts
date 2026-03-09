@@ -109,7 +109,7 @@ Texto original:
               'Authorization': `Bearer ${openRouterApiKey}`,
               'Content-Type': 'application/json',
               'HTTP-Referer': 'https://escolaflow.com.br',
-              'X-Title': 'EscolaFlow'
+              'X-Title': 'Ocorrências VC'
             },
             body: JSON.stringify({
               model: model,

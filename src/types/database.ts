@@ -1,5 +1,5 @@
 // src/types/database.ts
-// TypeScript type definitions for the EscolaFlow database schema
+// TypeScript type definitions for the Ocorrências VC database schema
 
 // ============================================================
 // Enums

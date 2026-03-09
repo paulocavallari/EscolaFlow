@@ -164,7 +164,7 @@ serve(async (req: Request) => {
                     `🔔 *Ocorrência Escolar*\n\n` +
                     `Prezado(a) ${tutor.full_name},\n\n` +
                     `Informamos que uma nova ocorrência disciplinar foi registrada pelo docente ${author?.full_name ?? 'Professor'} referente ao aluno *${studentName}*, sob sua tutoria.\n\n` +
-                    `Solicitamos a verificação através do sistema EscolaFlow para as devidas providências.`;
+                    `Solicitamos a verificação através do sistema Ocorrências VC para as devidas providências.`;
 
                 const result = await sendEvolutionMessage(tutor.whatsapp_number, message);
                 results.push({ recipient: 'tutor', ...result });
@@ -195,7 +195,7 @@ serve(async (req: Request) => {
                     for (const vp of vps) {
                         if (vp.whatsapp_number) {
                             const messageVp =
-                                `🏢 *Ocorrência para Análise*\n\nPrezado(a) ${vp.full_name},\n\nInformamos o recebimento de uma ocorrência disciplinar referente ao aluno *${studentName}*, registrada pelo docente ${author?.full_name ?? 'Professor'}.\n\nEsta ocorrência demanda análise da Vice-Direção. Por gentileza, acesse o sistema EscolaFlow para acompanhamento.`;
+                                `🏢 *Ocorrência para Análise*\n\nPrezado(a) ${vp.full_name},\n\nInformamos o recebimento de uma ocorrência disciplinar referente ao aluno *${studentName}*, registrada pelo docente ${author?.full_name ?? 'Professor'}.\n\nEsta ocorrência demanda análise da Vice-Direção. Por gentileza, acesse o sistema Ocorrências VC para acompanhamento.`;
                             const r2 = await sendEvolutionMessage(vp.whatsapp_number, messageVp);
                             results.push({ recipient: `vp_${vp.id}`, ...r2 });
                         }

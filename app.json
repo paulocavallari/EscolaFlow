@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "EscolaFlow",
+    "name": "Ocorrências VC",
     "slug": "EscolaFlow",
     "version": "1.0.0",
     "scheme": "escolaflow",
@@ -36,8 +36,8 @@
       [
         "expo-speech-recognition",
         {
-          "speechRecognitionPermission": "O EscolaFlow precisa da sua permissão para converter sua fala em texto.",
-          "microphonePermission": "O EscolaFlow precisa do microfone para ouvir a ocorrência e transcrever."
+          "speechRecognitionPermission": "O Ocorrências VC precisa da sua permissão para converter sua fala em texto.",
+          "microphonePermission": "O Ocorrências VC precisa do microfone para ouvir a ocorrência e transcrever."
         }
       ]
     ]

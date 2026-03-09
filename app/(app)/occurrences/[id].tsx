@@ -155,13 +155,24 @@ export default function OccurrenceDetailScreen() {
             }
             return;
         }
+        // Build a complete message with occurrence description + final parecer
+        const occurrenceDescription = occurrence.description_formal || occurrence.description_original || 'Descrição não disponível.';
         const lastAction = occurrence.actions && occurrence.actions.length > 0
             ? occurrence.actions[occurrence.actions.length - 1]
             : null;
-        const summaryText = lastAction?.description
-            ? `Parecer: ${lastAction.description}`
-            : 'A ocorrência foi concluída pela equipe escolar.';
-        const message = `*Comunicado Escolar — EscolaFlow*\n\nPrezado(a) responsável pelo(a) aluno(a) *${occurrence.student?.name ?? 'N/A'}* da turma *${occurrence.student?.class?.name ?? 'N/A'}*,\n\nInformamos que a ocorrência registrada foi *concluída*.\n\n${summaryText}\n\nQualquer dúvida, entre em contato com a escola.`;
+        const parecerText = lastAction?.description
+            ? lastAction.description
+            : 'Parecer não registrado.';
+
+        const message =
+            `*Comunicado Escolar — Ocorrências VC*\n\n` +
+            `Prezado(a) responsável pelo(a) aluno(a) *${occurrence.student?.name ?? 'N/A'}* da turma *${occurrence.student?.class?.name ?? 'N/A'}*,\n\n` +
+            `Informamos que foi registrada uma ocorrência referente ao(à) aluno(a), conforme detalhado abaixo.\n\n` +
+            `📝 *Ocorrência registrada por ${occurrence.author?.full_name ?? 'Professor(a)'}:*\n` +
+            `${occurrenceDescription}\n\n` +
+            `✅ *Parecer final:*\n` +
+            `${parecerText}\n\n` +
+            `Qualquer dúvida, entre em contato com a escola.`;
 
         const doSend = async () => {
             try {
@@ -277,7 +288,7 @@ export default function OccurrenceDetailScreen() {
                             `Turma: ${occurrence.student?.class?.name ?? 'N/A'}\n` +
                             `Registrada por: ${occurrence.author?.full_name ?? 'N/A'}\n\n` +
                             `Observação do tutor: ${manualTreatmentText.trim()}\n\n` +
-                            `Acesse o app EscolaFlow para analisar e registrar a devolutiva.`;
+                            `Acesse o app Ocorrências VC para analisar e registrar a devolutiva.`;
                         vpProfiles.forEach((vp: any) => {
                             if (vp.whatsapp_number) {
                                 sendWhatsAppMessage(vp.whatsapp_number, message)

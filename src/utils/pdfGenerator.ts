@@ -171,7 +171,7 @@ ${(() => {
 </div>
 
 <div class="footer">
-  EscolaFlow — gerado em ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} &nbsp;|&nbsp; Tel para contato: ___________________________
+  Ocorrências VC — gerado em ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} &nbsp;|&nbsp; Tel para contato: ___________________________
 </div>
 
 </body>

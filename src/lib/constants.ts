@@ -61,7 +61,7 @@ export const ACTION_TYPE_LABELS: Record<ActionType, string> = {
 // App Config
 // ============================================================
 
-export const APP_NAME = 'EscolaFlow';
+export const APP_NAME = 'Ocorrências VC';
 export const ITEMS_PER_PAGE = 20;
 
 // ============================================================
