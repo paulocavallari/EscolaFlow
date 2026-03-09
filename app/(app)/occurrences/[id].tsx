@@ -316,7 +316,7 @@ export default function OccurrenceDetailScreen() {
 
             {/* Formal Description */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>≡ƒô¥ Descri├º├úo Formal</Text>
+                <Text style={styles.sectionTitle}>📝 Descrição Formal</Text>
                 <View style={styles.descriptionBox}>
                     <Text style={styles.descriptionText}>{occurrence.description_formal}</Text>
                 </View>
@@ -324,7 +324,7 @@ export default function OccurrenceDetailScreen() {
 
             {/* Original Transcription */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>≡ƒÄÖ∩╕Å Relato Original</Text>
+                <Text style={styles.sectionTitle}>🎙️ Relato Original</Text>
                 <View style={[styles.descriptionBox, styles.originalBox]}>
                     <Text style={[styles.descriptionText, styles.originalText]}>
                         {occurrence.description_original}
@@ -335,7 +335,7 @@ export default function OccurrenceDetailScreen() {
             {/* Action Timeline */}
             {occurrence.actions && occurrence.actions.length > 0 && (
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>≡ƒôï Hist├│rico de Tratativas</Text>
+                    <Text style={styles.sectionTitle}>📓 Histórico de Tratativas</Text>
                     {occurrence.actions.map((action, idx) => {
                         const isEditing = editingActionId === action.id;
                         const canEditAction = Boolean(profileId && (action.author_id === profileId || isAdmin));
@@ -369,7 +369,7 @@ export default function OccurrenceDetailScreen() {
                                                 }}
                                                 style={styles.editActionBtn}
                                             >
-                                                <Text style={styles.editActionText}>Γ£Å∩╕Å Editar</Text>
+                                                <Text style={styles.editActionText}>✏️ Editar</Text>
                                             </TouchableOpacity>
                                         )}
                                     </View>
@@ -423,15 +423,15 @@ export default function OccurrenceDetailScreen() {
                 <View style={styles.treatmentPrompt}>
                     <Text style={styles.treatmentPromptTitle}>
                         {occurrence.status === OccurrenceStatus.ESCALATED_VP
-                            ? '≡ƒÅó Devolutiva da Vice-Dire├º├úo'
-                            : '≡ƒôú Registrar Tratativa'}
+                            ? '🏦 Devolutiva da Vice-Direção'
+                            : '📚 Registrar Tratativa'}
                     </Text>
                     <Text style={styles.treatmentHint}>{getTreatmentHint()}</Text>
                     <TouchableOpacity
                         style={styles.treatButton}
                         onPress={() => setShowTreatment(true)}
                     >
-                        <Text style={styles.treatButtonText}>≡ƒô¥ Registrar Provid├¬ncia</Text>
+                        <Text style={styles.treatButtonText}>📝 Registrar Providência</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -439,24 +439,24 @@ export default function OccurrenceDetailScreen() {
             {canTreat && showTreatment && (
                 <View style={styles.treatmentSection}>
                     <Text style={styles.treatmentTitle}>
-                        {isVP ? '≡ƒÅó Registrar Devolutiva' : '≡ƒôú Registrar Provid├¬ncia'}
+                        {isVP ? '🏦 Registrar Devolutiva' : '📚 Registrar Providência'}
                     </Text>
                     <Text style={styles.treatmentHint}>{getTreatmentHint()}</Text>
 
                     {/* Audio option */}
-                    <Text style={styles.inputSectionLabel}>≡ƒÄÖ∩╕Å Gravar o relato da provid├¬ncia (opcional)</Text>
+                    <Text style={styles.inputSectionLabel}>🎙️ Gravar o relato da providência (opcional)</Text>
                     <AudioRecorder
                         onTranscriptionComplete={handleTranscriptionComplete}
                         isProcessing={processText.isPending}
                     />
 
-                    <Text style={styles.orDivider}>ΓÇö OU DIGITAR ABAIXO ΓÇö</Text>
+                    <Text style={styles.orDivider}>— OU DIGITAR ABAIXO —</Text>
 
-                    <Text style={styles.inputSectionLabel}>Γ£ì∩╕Å Descreva a provid├¬ncia tomada</Text>
+                    <Text style={styles.inputSectionLabel}>✌️ Descreva a providência tomada</Text>
                     <TextInput
                         style={styles.textInput}
                         multiline
-                        placeholder="Ex: Realizei conversa com o aluno e seus respons├íveis..."
+                        placeholder="Ex: Realizei conversa com o aluno e seus responsáveis..."
                         placeholderTextColor={COLORS.textMuted}
                         value={manualTreatmentText}
                         onChangeText={setManualTreatmentText}
@@ -471,7 +471,7 @@ export default function OccurrenceDetailScreen() {
                         {processText.isPending ? (
                             <ActivityIndicator size="small" color={COLORS.white} />
                         ) : (
-                            <Text style={styles.actionBtnText}>Γ£¿ Formatar com IA (opcional)</Text>
+                            <Text style={styles.actionBtnText}>✨ Formatar com IA (opcional)</Text>
                         )}
                     </TouchableOpacity>
 
@@ -484,7 +484,7 @@ export default function OccurrenceDetailScreen() {
                                     handleSubmitAction(isVP ? 'vp_resolve' : 'resolve');
                                 }}
                             >
-                                <Text style={styles.actionBtnText}>Γ£à Concluir Ocorr├¬ncia</Text>
+                                <Text style={styles.actionBtnText}>✔ Concluir Ocorrência</Text>
                             </TouchableOpacity>
                         )}
                         {occurrence.status === OccurrenceStatus.PENDING_TUTOR && !isVP && (
@@ -494,7 +494,7 @@ export default function OccurrenceDetailScreen() {
                                     handleSubmitAction('escalate');
                                 }}
                             >
-                                <Text style={styles.actionBtnText}>Γ¼å∩╕Å Encaminhar ├á Vice-Dire├º├úo</Text>
+                                <Text style={styles.actionBtnText}>⬆️ Encaminhar à Vice-Direção</Text>
                             </TouchableOpacity>
                         )}
                     </View>
@@ -512,13 +512,13 @@ export default function OccurrenceDetailScreen() {
                         style={[styles.actionBtn, styles.pdfBtn]}
                         onPress={handleExportPDF}
                     >
-                        <Text style={styles.actionBtnText}>≡ƒôä Exportar Relat├│rio em PDF</Text>
+                        <Text style={styles.actionBtnText}>📄 Exportar Relatório em PDF</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={[styles.actionBtn, styles.whatsappBtn]}
                         onPress={handleSendWhatsApp}
                     >
-                        <Text style={styles.actionBtnText}>≡ƒô▒ Notificar Respons├ível via WhatsApp</Text>
+                        <Text style={styles.actionBtnText}>📱 Notificar Responsável via WhatsApp</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -530,7 +530,7 @@ export default function OccurrenceDetailScreen() {
                         style={styles.deleteBtn}
                         onPress={handleDelete}
                     >
-                        <Text style={styles.deleteBtnText}>≡ƒùæ∩╕Å Excluir Ocorr├¬ncia Permanentemente</Text>
+                        <Text style={styles.deleteBtnText}>🗑️ Excluir Ocorrência Permanentemente</Text>
                     </TouchableOpacity>
                 </View>
             )}

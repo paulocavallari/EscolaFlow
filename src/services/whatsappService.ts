@@ -37,13 +37,12 @@ export async function sendWhatsAppMessage(phone: string, text: string): Promise<
         // Use our proxy edge-function to avert Mixed Content blocked by Vercel
         const fetchUrl = `${supabaseUrl}/functions/v1/send-whatsapp-manual`;
 
-        console.log('Proxying WhatsApp to:', fetchUrl, 'number:', formattedPhone);
-
         const response = await fetch(fetchUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${token}`,
+                'apikey': supabaseAnonKey,          // required by Supabase edge functions
             },
             body: JSON.stringify({
                 phone: formattedPhone,
