@@ -523,8 +523,8 @@ export default function OccurrenceDetailScreen() {
                 </View>
             )}
 
-            {/* Admin: Delete */}
-            {isAdmin && (
+            {/* Admin & VP: Delete */}
+            {(isAdmin || isVP) && (
                 <View style={styles.adminSection}>
                     <TouchableOpacity
                         style={styles.deleteBtn}

@@ -31,34 +31,20 @@ export async function sendWhatsAppMessage(phone: string, text: string): Promise<
         }
 
         const formattedPhone = formatPhone(phone);
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData?.session?.access_token || supabaseAnonKey;
 
-        // Use our proxy edge-function to avert Mixed Content blocked by Vercel
-        const fetchUrl = `${supabaseUrl}/functions/v1/send-whatsapp-manual`;
-
-        const response = await fetch(fetchUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-                'apikey': supabaseAnonKey,          // required by Supabase edge functions
-            },
-            body: JSON.stringify({
+        const { data, error } = await supabase.functions.invoke('send-whatsapp-manual', {
+            body: {
                 phone: formattedPhone,
                 text,
-            }),
+            }
         });
 
-        const textResponse = await response.text();
-        console.log('Supabase Proxy Response:', textResponse);
-
-        try {
-            const data = JSON.parse(textResponse);
-            return { success: response.ok, data, status: response.status };
-        } catch (e) {
-            return { success: response.ok, data: textResponse, status: response.status };
+        if (error) {
+            console.error('Supabase Invoke Error:', error);
+            return { success: false, error: error.message };
         }
+
+        return { success: true, data };
 
     } catch (error: any) {
         console.error('WhatsApp Service Exception:', error);

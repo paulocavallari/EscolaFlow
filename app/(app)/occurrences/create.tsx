@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { AudioRecorder } from '../../../src/components/AudioRecorder';
-import { AIReviewModal } from '../../../src/components/AIReviewModal';
+// import { AIReviewModal } from '../../../src/components/AIReviewModal';
 import { useStudentsList, useClassesList } from '../../../src/hooks/useStudents';
 import { useCreateOccurrence, useProcessText } from '../../../src/hooks/useOccurrences';
 import { useProfile } from '../../../src/hooks/useProfile';
@@ -52,7 +52,7 @@ const StudentItem = memo(function StudentItem({
     );
 });
 
-type Step = 'select_student' | 'record_audio';
+type Step = 'select_student' | 'record_audio' | 'review_audio';
 
 // Steps displayed in the progress bar
 const STEP_LABELS = ['1. Aluno', '2. Relato', '3. Revisar'];
@@ -71,7 +71,7 @@ export default function CreateOccurrenceScreen() {
     // Audio / AI
     const [originalText, setOriginalText] = useState('');
     const [formalText, setFormalText] = useState('');
-    const [showReviewModal, setShowReviewModal] = useState(false);
+    // Input mode
 
     // Input mode
     const [inputMode, setInputMode] = useState<'audio' | 'text'>('audio');
@@ -95,7 +95,7 @@ export default function CreateOccurrenceScreen() {
             const result = await processText.mutateAsync(text);
             setOriginalText(result.original);
             setFormalText(result.formal);
-            setShowReviewModal(true);
+            setStep('review_audio');
         } catch (err) {
             Alert.alert(
                 'Erro no processamento',
@@ -116,7 +116,7 @@ export default function CreateOccurrenceScreen() {
             const result = await processText.mutateAsync(manualText);
             setOriginalText(result.original);
             setFormalText(result.formal);
-            setShowReviewModal(true);
+            setStep('review_audio');
         } catch (err) {
             Alert.alert(
                 'Erro no processamento',
@@ -143,7 +143,10 @@ export default function CreateOccurrenceScreen() {
     const handleConfirmText = useCallback(async (editedText: string) => {
         if (!selectedStudent || !profileId) return;
 
-        setShowReviewModal(false);
+        if (!editedText.trim()) {
+            Alert.alert('Aviso', 'O texto da ocorrência não pode ficar vazio.');
+            return;
+        }
 
         try {
             await createOccurrence.mutateAsync({
@@ -190,13 +193,13 @@ export default function CreateOccurrenceScreen() {
     }, [selectedStudent, profileId, originalText, createOccurrence]);
 
     const handleReRecord = useCallback(() => {
-        setShowReviewModal(false);
+        setStep('record_audio');
         setOriginalText('');
         setFormalText('');
     }, []);
 
     // Progress bar step index
-    const stepIndex = step === 'select_student' ? 0 : 1;
+    const stepIndex = step === 'select_student' ? 0 : step === 'record_audio' ? 1 : 2;
 
     return (
         <View style={styles.container}>
@@ -208,8 +211,8 @@ export default function CreateOccurrenceScreen() {
                     {/* Progress Steps */}
                     <View style={styles.progressBar}>
                         {STEP_LABELS.map((label, i) => {
-                            const isDone = i < stepIndex || (i === 2 && showReviewModal);
-                            const isActive = i === stepIndex && !showReviewModal || (i === 2 && showReviewModal);
+                            const isDone = i < stepIndex;
+                            const isActive = i === stepIndex;
                             return (
                                 <React.Fragment key={label}>
                                     <View style={styles.progressStep}>
@@ -400,15 +403,51 @@ export default function CreateOccurrenceScreen() {
                         </View>
                     )}
 
-                    {/* AI Review Modal */}
-                    <AIReviewModal
-                        visible={showReviewModal}
-                        originalText={originalText}
-                        formalText={formalText}
-                        onConfirm={handleConfirmText}
-                        onReRecord={handleReRecord}
-                        onClose={() => setShowReviewModal(false)}
-                    />
+                    {/* Step 3: Review */}
+                    {step === 'review_audio' && (
+                        <ScrollView
+                            style={styles.stepContent}
+                            contentContainerStyle={{ paddingBottom: 40 }}
+                            keyboardShouldPersistTaps="handled"
+                            showsVerticalScrollIndicator={false}
+                        >
+                            <Text style={styles.stepTitle}>Revisão da Ocorrência</Text>
+                            <Text style={styles.stepHint}>Edite o texto formal se necessário antes de salvar.</Text>
+
+                            <View style={styles.studentSelectedCard}>
+                                <Text style={styles.studentSelectedLabel}>Original Transcrito:</Text>
+                                <Text style={[styles.studentSelectedName, { fontSize: 14, fontWeight: '400', fontStyle: 'italic', marginTop: 8, color: COLORS.textSecondary }]}>
+                                    "{originalText}"
+                                </Text>
+                            </View>
+
+                            <Text style={styles.fieldLabel}>Versão Formal (Editável)</Text>
+                            <TextInput
+                                style={styles.textInputArea}
+                                value={formalText}
+                                onChangeText={setFormalText}
+                                multiline
+                                textAlignVertical="top"
+                            />
+
+                            <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                                <TouchableOpacity
+                                    style={[styles.backButton, { flex: 1, marginTop: 0, backgroundColor: COLORS.surfaceLight, borderRadius: 12, paddingVertical: 14 }]}
+                                    onPress={handleReRecord}
+                                >
+                                    <Text style={[styles.backButtonText, { fontWeight: '600', color: COLORS.textPrimary }]}>🔄 Regravar</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[styles.nextButton, { flex: 1, paddingVertical: 14, backgroundColor: formalText.trim() ? COLORS.primary : COLORS.border }]}
+                                    onPress={() => handleConfirmText(formalText)}
+                                    disabled={!formalText.trim()}
+                                >
+                                    <Text style={styles.nextButtonText}>✅ Confirmar e Salvar</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </ScrollView>
+                    )}
                 </View>
             </KeyboardAvoidingView>
         </View>
