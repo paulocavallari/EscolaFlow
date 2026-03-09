@@ -586,12 +586,14 @@ export default function OccurrenceDetailScreen() {
                     >
                         <Text style={styles.actionBtnText}>📄 Exportar Relatório em PDF</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.actionBtn, styles.whatsappBtn]}
-                        onPress={handleSendWhatsApp}
-                    >
-                        <Text style={styles.actionBtnText}>📱 Notificar Responsável via WhatsApp</Text>
-                    </TouchableOpacity>
+                    {isVP && (
+                        <TouchableOpacity
+                            style={[styles.actionBtn, styles.whatsappBtn]}
+                            onPress={handleSendWhatsApp}
+                        >
+                            <Text style={styles.actionBtnText}>📱 Notificar Responsável via WhatsApp</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             )}
 
