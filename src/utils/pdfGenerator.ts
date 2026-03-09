@@ -153,7 +153,16 @@ export async function generateOccurrencePDF(occurrence: OccurrenceWithRelations)
 <div class="text-block">${formatActionRows(vpActions)}</div>
 
 <div class="sec-title">Parecer Final</div>
-<div class="text-block">Ocorrência <strong>${occurrence.status === 'CONCLUDED' ? 'CONCLUÍDA ✔' : occurrence.status}</strong>.</div>
+<div class="text-block">
+${(() => {
+  const allActions = occurrence.actions ?? [];
+  const lastAction = allActions.length > 0 ? allActions[allActions.length - 1] : null;
+  if (!lastAction) return '<span style="color:#666;font-style:italic">Nenhum parecer registrado.</span>';
+  const aDate = format(new Date(lastAction.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  const aType = ACTION_TYPE_LABEL[lastAction.action_type] ?? lastAction.action_type;
+  return `<strong>${aType}</strong> <span style="color:#555;font-size:10px">(${aDate} — ${lastAction.author?.full_name ?? '-'})</span><br/>${lastAction.description}`;
+})()}
+</div>
 
 <div class="sig-section">
   <div class="sig-box"><div class="sig-line">Ciência do(a) Aluno(a)</div></div>

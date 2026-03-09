@@ -40,21 +40,27 @@ const StudentItem = memo(function StudentItem({
             style={[styles.studentItem, isSelected && styles.studentItemSelected]}
             onPress={() => onPress(student)}
         >
-            <View>
+            <View style={{ flex: 1 }}>
                 <Text style={styles.studentName}>{student.name}</Text>
-                <Text style={styles.studentClass}>{student.matricula ?? 'Sem matrícula'}</Text>
+                <Text style={styles.studentMeta}>
+                    {student.class?.name ?? 'Turma não definida'}
+                    {student.matricula ? ` · Mat: ${student.matricula}` : ''}
+                </Text>
             </View>
             {isSelected && <Text style={styles.checkMark}>✓</Text>}
         </TouchableOpacity>
     );
 });
 
-type Step = 'select_student' | 'record_audio' | 'review';
+type Step = 'select_student' | 'record_audio';
+
+// Steps displayed in the progress bar
+const STEP_LABELS = ['1. Aluno', '2. Relato', '3. Revisar'];
+const STEP_KEYS: Step[] = ['select_student', 'record_audio'];
 
 export default function CreateOccurrenceScreen() {
     const { profileId } = useProfile();
 
-    // Step management
     const [step, setStep] = useState<Step>('select_student');
 
     // Student selection
@@ -66,6 +72,10 @@ export default function CreateOccurrenceScreen() {
     const [originalText, setOriginalText] = useState('');
     const [formalText, setFormalText] = useState('');
     const [showReviewModal, setShowReviewModal] = useState(false);
+
+    // Input mode
+    const [inputMode, setInputMode] = useState<'audio' | 'text'>('audio');
+    const [manualText, setManualText] = useState('');
 
     // Queries
     const { data: classes } = useClassesList();
@@ -87,7 +97,6 @@ export default function CreateOccurrenceScreen() {
             setFormalText(result.formal);
             setShowReviewModal(true);
         } catch (err) {
-            console.error('Text processing error:', err);
             Alert.alert(
                 'Erro no processamento',
                 err instanceof Error
@@ -98,24 +107,17 @@ export default function CreateOccurrenceScreen() {
         }
     }, [processText]);
 
-    // Step 2: Input Mode
-    const [inputMode, setInputMode] = useState<'audio' | 'text'>('audio');
-    const [manualText, setManualText] = useState('');
-
     const handleTextProcess = async () => {
         if (!manualText.trim()) {
-            if (Platform.OS === 'web') window.alert('Digite algo primeiro.');
-            else Alert.alert('Aviso', 'Por favor, digite os detalhes da ocorrência.');
+            Alert.alert('Aviso', 'Por favor, descreva os detalhes da ocorrência antes de continuar.');
             return;
         }
-
         try {
             const result = await processText.mutateAsync(manualText);
             setOriginalText(result.original);
             setFormalText(result.formal);
             setShowReviewModal(true);
         } catch (err) {
-            console.error('Text processing error:', err);
             Alert.alert(
                 'Erro no processamento',
                 err instanceof Error ? err.message : 'Falha ao processar texto.',
@@ -124,8 +126,16 @@ export default function CreateOccurrenceScreen() {
         }
     };
 
-    // Cancel processing and reset so user can re-record
     const handleCancelProcessing = useCallback(() => {
+        processText.reset();
+    }, [processText]);
+
+    // Handle going back to step 1 — reset audio state too
+    const handleBackToStudent = useCallback(() => {
+        setStep('select_student');
+        setOriginalText('');
+        setFormalText('');
+        setManualText('');
         processText.reset();
     }, [processText]);
 
@@ -144,17 +154,16 @@ export default function CreateOccurrenceScreen() {
                 description_formal: editedText,
             }, {
                 onSuccess: (newOccurrence) => {
-                    // Send WhatsApp if Tutor has phone
+                    // Auto-notify tutor via WhatsApp (fire-and-forget)
                     if (selectedStudent.tutor?.whatsapp_number) {
-                        const message = `*Nova Ocorrência Escolar*\n\nAluno: ${selectedStudent.name}\nTurma: ${selectedStudent.class?.name || 'N/A'}\n\nResumo: ${editedText}\n\nAcesse o app para mais detalhes.`;
-
+                        const message =
+                            `*Nova Ocorrência Escolar*\n\n` +
+                            `Aluno: ${selectedStudent.name}\n` +
+                            `Turma: ${selectedStudent.class?.name || 'N/A'}\n\n` +
+                            `Resumo: ${editedText}\n\n` +
+                            `Acesse o app EscolaFlow para mais detalhes e para registrar a tratativa.`;
                         sendWhatsAppMessage(selectedStudent.tutor.whatsapp_number, message)
-                            .then(success => {
-                                if (success) console.log('WhatsApp notification sent');
-                                else console.warn('Failed to send WhatsApp notification');
-                            });
-                    } else {
-                        console.log('No tutor phone available for WhatsApp notification');
+                            .catch(() => { /* silent — notification failure doesn't block the flow */ });
                     }
 
                     // Reset state
@@ -164,34 +173,30 @@ export default function CreateOccurrenceScreen() {
                     setStep('select_student');
                     setSelectedStudent(null);
 
-                    if (Platform.OS === 'web') {
-                        window.alert('Ocorrência registrada com sucesso!');
-                        router.replace(`/(app)/occurrences/${newOccurrence.id}`);
-                    } else {
-                        Alert.alert('Sucesso', 'Ocorrência registrada com sucesso!', [
-                            {
-                                text: 'Ver Ocorrência',
-                                onPress: () => router.replace(`/(app)/occurrences/${newOccurrence.id}`)
-                            },
-                        ]);
-                    }
+                    Alert.alert('✅ Sucesso', 'Ocorrência registrada com sucesso!', [
+                        {
+                            text: 'Ver Ocorrência',
+                            onPress: () => router.replace(`/(app)/occurrences/${newOccurrence.id}`)
+                        },
+                    ]);
                 },
-                onError: (err) => {
-                    Alert.alert('Erro', 'Falha ao salvar a ocorrência.');
+                onError: () => {
+                    Alert.alert('Erro', 'Falha ao salvar a ocorrência. Tente novamente.');
                 }
             });
-
         } catch (err) {
             console.error('Error on create:', err);
         }
     }, [selectedStudent, profileId, originalText, createOccurrence]);
 
-    // Handle re-record
     const handleReRecord = useCallback(() => {
         setShowReviewModal(false);
         setOriginalText('');
         setFormalText('');
     }, []);
+
+    // Progress bar step index
+    const stepIndex = step === 'select_student' ? 0 : 1;
 
     return (
         <View style={styles.container}>
@@ -202,38 +207,48 @@ export default function CreateOccurrenceScreen() {
                 <View style={styles.content}>
                     {/* Progress Steps */}
                     <View style={styles.progressBar}>
-                        {(['select_student', 'record_audio', 'review'] as Step[]).map((s, i) => (
-                            <View key={s} style={styles.progressStep}>
-                                <View
-                                    style={[
-                                        styles.progressDot,
-                                        step === s && styles.progressDotActive,
-                                        (['select_student', 'record_audio', 'review'].indexOf(step) > i) && styles.progressDotDone,
-                                    ]}
-                                >
-                                    <Text style={styles.progressDotText}>{i + 1}</Text>
-                                </View>
-                                <Text style={[styles.progressLabel, step === s && styles.progressLabelActive]}>
-                                    {['Aluno', 'Relato (IA)', 'Revisar'][i]}
-                                </Text>
-                            </View>
-                        ))}
+                        {STEP_LABELS.map((label, i) => {
+                            const isDone = i < stepIndex || (i === 2 && showReviewModal);
+                            const isActive = i === stepIndex && !showReviewModal || (i === 2 && showReviewModal);
+                            return (
+                                <React.Fragment key={label}>
+                                    <View style={styles.progressStep}>
+                                        <View
+                                            style={[
+                                                styles.progressDot,
+                                                isActive && styles.progressDotActive,
+                                                isDone && styles.progressDotDone,
+                                            ]}
+                                        >
+                                            <Text style={styles.progressDotText}>{i + 1}</Text>
+                                        </View>
+                                        <Text style={[styles.progressLabel, isActive && styles.progressLabelActive]}>
+                                            {label.replace(/^\d+\. /, '')}
+                                        </Text>
+                                    </View>
+                                    {i < STEP_LABELS.length - 1 && (
+                                        <View style={[styles.progressConnector, i < stepIndex && styles.progressConnectorDone]} />
+                                    )}
+                                </React.Fragment>
+                            );
+                        })}
                     </View>
 
                     {/* Step 1: Select Student */}
                     {step === 'select_student' && (
                         <View style={styles.stepContent}>
                             <Text style={styles.stepTitle}>Selecionar Aluno</Text>
+                            <Text style={styles.stepHint}>Escolha a turma e depois toque no nome do aluno.</Text>
 
                             {/* Class filter */}
-                            <Text style={styles.fieldLabel}>Turma</Text>
+                            <Text style={styles.fieldLabel}>Filtrar por Turma</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.classScroll}>
                                 <TouchableOpacity
                                     style={[styles.classChip, !selectedClassId && styles.classChipActive]}
                                     onPress={() => setSelectedClassId('')}
                                 >
                                     <Text style={[styles.classChipText, !selectedClassId && styles.classChipTextActive]}>
-                                        Todas
+                                        Todas as Turmas
                                     </Text>
                                 </TouchableOpacity>
                                 {classes?.map((cls) => (
@@ -254,7 +269,7 @@ export default function CreateOccurrenceScreen() {
                                 style={styles.searchInput}
                                 value={studentSearch}
                                 onChangeText={setStudentSearch}
-                                placeholder="Buscar aluno por nome..."
+                                placeholder="🔍 Buscar aluno por nome..."
                                 placeholderTextColor={COLORS.textMuted}
                             />
 
@@ -270,7 +285,9 @@ export default function CreateOccurrenceScreen() {
                                     />
                                 )}
                                 ListEmptyComponent={
-                                    <Text style={styles.emptyListText}>Nenhum aluno encontrado.</Text>
+                                    <Text style={styles.emptyListText}>
+                                        {studentSearch ? 'Nenhum aluno encontrado com esse nome.' : 'Selecione uma turma acima para ver os alunos.'}
+                                    </Text>
                                 }
                                 keyboardShouldPersistTaps="handled"
                                 style={{ flex: 1, marginTop: 10 }}
@@ -278,12 +295,18 @@ export default function CreateOccurrenceScreen() {
                             />
 
                             {selectedStudent && (
-                                <TouchableOpacity
-                                    style={styles.nextButton}
-                                    onPress={() => setStep('record_audio')}
-                                >
-                                    <Text style={styles.nextButtonText}>Próximo →</Text>
-                                </TouchableOpacity>
+                                <View style={styles.selectedBanner}>
+                                    <Text style={styles.selectedBannerText}>
+                                        ✓ Selecionado: <Text style={{ fontWeight: '700' }}>{selectedStudent.name}</Text>
+                                        {selectedStudent.class?.name ? `  ·  ${selectedStudent.class.name}` : ''}
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={styles.nextButton}
+                                        onPress={() => setStep('record_audio')}
+                                    >
+                                        <Text style={styles.nextButtonText}>Próximo →</Text>
+                                    </TouchableOpacity>
+                                </View>
                             )}
                         </View>
                     )}
@@ -297,22 +320,26 @@ export default function CreateOccurrenceScreen() {
                             showsVerticalScrollIndicator={false}
                         >
                             <Text style={styles.stepTitle}>Detalhes da Ocorrência</Text>
-                            <Text style={styles.stepSubtitle}>
-                                Aluno(a): {selectedStudent?.name}
-                            </Text>
+                            <View style={styles.studentSelectedCard}>
+                                <Text style={styles.studentSelectedLabel}>Aluno(a):</Text>
+                                <Text style={styles.studentSelectedName}>{selectedStudent?.name}</Text>
+                                {selectedStudent?.class?.name && (
+                                    <Text style={styles.studentSelectedClass}>{selectedStudent.class.name}</Text>
+                                )}
+                            </View>
 
                             <View style={styles.tabsContainer}>
                                 <TouchableOpacity
                                     style={[styles.tabButton, inputMode === 'audio' && styles.tabButtonActive]}
                                     onPress={() => setInputMode('audio')}
                                 >
-                                    <Text style={[styles.tabText, inputMode === 'audio' && styles.tabTextActive]}>🎙️ Áudio</Text>
+                                    <Text style={[styles.tabText, inputMode === 'audio' && styles.tabTextActive]}>🎙️ Gravação de Voz</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={[styles.tabButton, inputMode === 'text' && styles.tabButtonActive]}
                                     onPress={() => setInputMode('text')}
                                 >
-                                    <Text style={[styles.tabText, inputMode === 'text' && styles.tabTextActive]}>✍️ Texto</Text>
+                                    <Text style={[styles.tabText, inputMode === 'text' && styles.tabTextActive]}>✍️ Digitar Texto</Text>
                                 </TouchableOpacity>
                             </View>
 
@@ -324,9 +351,12 @@ export default function CreateOccurrenceScreen() {
                                 />
                             ) : (
                                 <View style={styles.textInputContainer}>
+                                    <Text style={styles.textInputHint}>
+                                        Descreva a ocorrência com suas próprias palavras. A IA irá formatar o texto automaticamente.
+                                    </Text>
                                     <TextInput
                                         style={styles.textInputArea}
-                                        placeholder="Descreva os detalhes da ocorrência..."
+                                        placeholder="Ex: O aluno João foi pego usando o celular durante a prova de matemática e recusou-se a guardar..."
                                         placeholderTextColor={COLORS.textMuted}
                                         value={manualText}
                                         onChangeText={setManualText}
@@ -338,7 +368,6 @@ export default function CreateOccurrenceScreen() {
                                         <View style={styles.processingTextContainer}>
                                             <ActivityIndicator size="small" color={COLORS.primary} />
                                             <Text style={styles.processingLabel}>I.A. Reescrevendo relato...</Text>
-
                                             <TouchableOpacity style={styles.cancelButton} onPress={handleCancelProcessing}>
                                                 <Text style={styles.cancelText}>Cancelar</Text>
                                             </TouchableOpacity>
@@ -356,9 +385,9 @@ export default function CreateOccurrenceScreen() {
 
                             <TouchableOpacity
                                 style={styles.backButton}
-                                onPress={() => setStep('select_student')}
+                                onPress={handleBackToStudent}
                             >
-                                <Text style={styles.backButtonText}>← Voltar para seleção</Text>
+                                <Text style={styles.backButtonText}>← Voltar e trocar aluno</Text>
                             </TouchableOpacity>
                         </ScrollView>
                     )}
@@ -381,8 +410,8 @@ export default function CreateOccurrenceScreen() {
                         onClose={() => setShowReviewModal(false)}
                     />
                 </View>
-            </KeyboardAvoidingView >
-        </View >
+            </KeyboardAvoidingView>
+        </View>
     );
 }
 
@@ -397,12 +426,22 @@ const styles = StyleSheet.create({
     },
     progressBar: {
         flexDirection: 'row',
+        alignItems: 'center',
         justifyContent: 'center',
-        gap: 32,
-        marginBottom: 32,
+        marginBottom: 28,
     },
     progressStep: {
         alignItems: 'center',
+    },
+    progressConnector: {
+        flex: 1,
+        height: 2,
+        backgroundColor: COLORS.surfaceLight,
+        marginHorizontal: 6,
+        marginBottom: 20,
+    },
+    progressConnectorDone: {
+        backgroundColor: COLORS.success,
     },
     progressDot: {
         width: 32,
@@ -431,6 +470,7 @@ const styles = StyleSheet.create({
     },
     progressLabelActive: {
         color: COLORS.primary,
+        fontWeight: '700',
     },
     stepContent: {
         flex: 1,
@@ -441,30 +481,34 @@ const styles = StyleSheet.create({
         color: COLORS.textPrimary,
         marginBottom: 4,
     },
-    stepSubtitle: {
+    stepHint: {
         fontSize: 14,
         color: COLORS.textSecondary,
         marginBottom: 20,
     },
     fieldLabel: {
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: '600',
         color: COLORS.textSecondary,
         marginBottom: 8,
-        marginTop: 16,
+        marginTop: 8,
     },
     classScroll: {
         marginBottom: 16,
+        maxHeight: 44,
     },
     classChip: {
         paddingHorizontal: 14,
-        paddingVertical: 8,
+        paddingVertical: 9,
         borderRadius: 20,
         backgroundColor: COLORS.surface,
         marginRight: 8,
+        borderWidth: 1,
+        borderColor: COLORS.border + '40',
     },
     classChipActive: {
         backgroundColor: COLORS.primary,
+        borderColor: COLORS.primary,
     },
     classChipText: {
         fontSize: 13,
@@ -478,10 +522,10 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.surface,
         borderRadius: 12,
         paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingVertical: 13,
         fontSize: 15,
         color: COLORS.textPrimary,
-        marginBottom: 12,
+        marginBottom: 8,
         borderWidth: 1,
         borderColor: COLORS.border + '40',
     },
@@ -495,6 +539,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: COLORS.border + '30',
+        minHeight: 60,
     },
     studentItemSelected: {
         borderColor: COLORS.primary,
@@ -505,30 +550,68 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: COLORS.textPrimary,
     },
-    studentClass: {
+    studentMeta: {
         fontSize: 12,
         color: COLORS.textSecondary,
         marginTop: 2,
     },
     checkMark: {
-        fontSize: 18,
+        fontSize: 20,
         color: COLORS.primary,
         fontWeight: '700',
+    },
+    selectedBanner: {
+        backgroundColor: COLORS.primary + '10',
+        borderRadius: 12,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: COLORS.primary + '40',
+        marginTop: 8,
+    },
+    selectedBannerText: {
+        fontSize: 14,
+        color: COLORS.textSecondary,
+        marginBottom: 10,
     },
     nextButton: {
         backgroundColor: COLORS.primary,
         borderRadius: 12,
         paddingVertical: 14,
         alignItems: 'center',
-        marginTop: 16,
     },
     nextButtonText: {
         fontSize: 16,
         fontWeight: '700',
         color: COLORS.white,
     },
+    studentSelectedCard: {
+        backgroundColor: COLORS.surface,
+        borderRadius: 12,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: COLORS.primary + '30',
+        marginBottom: 20,
+    },
+    studentSelectedLabel: {
+        fontSize: 12,
+        color: COLORS.textMuted,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    studentSelectedName: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: COLORS.textPrimary,
+        marginTop: 2,
+    },
+    studentSelectedClass: {
+        fontSize: 13,
+        color: COLORS.textSecondary,
+        marginTop: 2,
+    },
     backButton: {
-        paddingVertical: 12,
+        paddingVertical: 14,
         alignItems: 'center',
         marginTop: 16,
     },
@@ -557,12 +640,12 @@ const styles = StyleSheet.create({
     },
     tabButton: {
         flex: 1,
-        paddingVertical: 10,
+        paddingVertical: 11,
         alignItems: 'center',
         borderRadius: 8,
     },
     tabButtonActive: {
-        backgroundColor: COLORS.primary + '15',
+        backgroundColor: COLORS.primary + '20',
     },
     tabText: {
         fontSize: 14,
@@ -575,17 +658,24 @@ const styles = StyleSheet.create({
     textInputContainer: {
         marginBottom: 16,
     },
+    textInputHint: {
+        fontSize: 13,
+        color: COLORS.textSecondary,
+        marginBottom: 10,
+        lineHeight: 20,
+    },
     textInputArea: {
         backgroundColor: COLORS.surface,
         borderRadius: 16,
         borderWidth: 1,
         borderColor: COLORS.border + '50',
-        minHeight: 180,
+        minHeight: 160,
         padding: 16,
         fontSize: 15,
         color: COLORS.textPrimary,
         lineHeight: 22,
         marginBottom: 16,
+        textAlignVertical: 'top',
     },
     processTextButton: {
         backgroundColor: COLORS.primary,
@@ -605,7 +695,6 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: 1,
         borderColor: COLORS.border + '30',
-        borderStyle: 'dashed',
     },
     processingLabel: {
         marginTop: 12,
@@ -615,20 +704,22 @@ const styles = StyleSheet.create({
     },
     cancelButton: {
         marginTop: 12,
-        paddingVertical: 6,
-        paddingHorizontal: 16,
+        paddingVertical: 8,
+        paddingHorizontal: 20,
         borderRadius: 20,
         backgroundColor: COLORS.surfaceLight,
     },
     cancelText: {
         color: COLORS.textSecondary,
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: '600',
     },
     emptyListText: {
         textAlign: 'center',
         color: COLORS.textMuted,
-        paddingVertical: 16,
+        paddingVertical: 24,
         fontSize: 14,
+        lineHeight: 22,
+        paddingHorizontal: 16,
     },
 });

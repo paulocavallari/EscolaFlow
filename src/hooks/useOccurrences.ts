@@ -195,8 +195,6 @@ export function useProcessText() {
         mutationFn: async (text: string): Promise<AudioProcessingResult> => { // Returns {original, formal} just like audio
             const TIMEOUT_MS = 60_000; // 60 seconds for text parsing
 
-            console.log('[processText] Invoking Edge Function process-text via fetch...');
-
             const { data: sessionData } = await supabase.auth.getSession();
             const token = sessionData?.session?.access_token || supabaseAnonKey;
 
@@ -204,8 +202,6 @@ export function useProcessText() {
             const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
             try {
-                console.log(`[processText] Requesting Edge Function at: ${supabaseUrl}/functions/v1/process-text`);
-                console.log(`[processText] Token preview: ${token?.substring(0, 15)}...`);
 
                 const res = await fetch(`${supabaseUrl}/functions/v1/process-text`, {
                     method: 'POST',
@@ -218,10 +214,8 @@ export function useProcessText() {
                 });
 
                 clearTimeout(timeoutId);
-                console.log(`[processText] Response status: ${res.status}`);
 
                 const resText = await res.text();
-                console.log(`[processText] Unparsed raw response body:`, resText);
 
                 let parsed = null;
                 try {

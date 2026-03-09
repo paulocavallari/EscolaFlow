@@ -9,6 +9,8 @@ import {
     StyleSheet,
     TouchableOpacity,
     RefreshControl,
+    Alert,
+    Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -34,6 +36,31 @@ export default function DashboardScreen() {
         (o) => o.status === OccurrenceStatus.CONCLUDED
     ).length ?? 0;
 
+    const handleSignOut = async () => {
+        if (Platform.OS === 'web') {
+            if (window.confirm('Deseja realmente sair do sistema?')) {
+                await signOut();
+                router.replace('/(auth)/login');
+            }
+        } else {
+            Alert.alert(
+                'Sair',
+                'Deseja realmente sair do sistema?',
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                        text: 'Sair',
+                        style: 'destructive',
+                        onPress: async () => {
+                            await signOut();
+                            router.replace('/(auth)/login');
+                        },
+                    },
+                ]
+            );
+        }
+    };
+
     return (
         <ScrollView
             style={styles.container}
@@ -57,7 +84,8 @@ export default function DashboardScreen() {
                         </Text>
                     </View>
                 </View>
-                <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
+                <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
+                    <Text style={styles.logoutIcon}>🚪</Text>
                     <Text style={styles.logoutText}>Sair</Text>
                 </TouchableOpacity>
             </View>
@@ -67,26 +95,35 @@ export default function DashboardScreen() {
             <View style={styles.statsGrid}>
                 <TouchableOpacity
                     style={[styles.statCard, { borderLeftColor: COLORS.warning }]}
-                    onPress={() => router.push('/(app)/occurrences')}
+                    onPress={() => router.push({ pathname: '/(app)/occurrences', params: { filter: 'PENDING_TUTOR' } })}
                 >
-                    <Text style={styles.statNumber}>{pendingCount}</Text>
-                    <Text style={styles.statLabel}>{STATUS_LABELS[OccurrenceStatus.PENDING_TUTOR]}</Text>
+                    <View style={styles.statLeft}>
+                        <Text style={styles.statIcon}>🕐</Text>
+                        <Text style={styles.statNumber}>{pendingCount}</Text>
+                    </View>
+                    <Text style={styles.statLabel}>Aguardando Tratativa</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                     style={[styles.statCard, { borderLeftColor: COLORS.error }]}
-                    onPress={() => router.push('/(app)/occurrences')}
+                    onPress={() => router.push({ pathname: '/(app)/occurrences', params: { filter: 'ESCALATED_VP' } })}
                 >
-                    <Text style={styles.statNumber}>{escalatedCount}</Text>
-                    <Text style={styles.statLabel}>{STATUS_LABELS[OccurrenceStatus.ESCALATED_VP]}</Text>
+                    <View style={styles.statLeft}>
+                        <Text style={styles.statIcon}>⬆️</Text>
+                        <Text style={styles.statNumber}>{escalatedCount}</Text>
+                    </View>
+                    <Text style={styles.statLabel}>Encaminhadas à Vice-Direção</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                     style={[styles.statCard, { borderLeftColor: COLORS.success }]}
-                    onPress={() => router.push('/(app)/occurrences')}
+                    onPress={() => router.push({ pathname: '/(app)/occurrences', params: { filter: 'CONCLUDED' } })}
                 >
-                    <Text style={styles.statNumber}>{concludedCount}</Text>
-                    <Text style={styles.statLabel}>{STATUS_LABELS[OccurrenceStatus.CONCLUDED]}</Text>
+                    <View style={styles.statLeft}>
+                        <Text style={styles.statIcon}>✅</Text>
+                        <Text style={styles.statNumber}>{concludedCount}</Text>
+                    </View>
+                    <Text style={styles.statLabel}>Concluídas</Text>
                 </TouchableOpacity>
             </View>
 
@@ -94,11 +131,11 @@ export default function DashboardScreen() {
             <Text style={styles.sectionTitle}>Ações Rápidas</Text>
             <View style={styles.actionsRow}>
                 <TouchableOpacity
-                    style={styles.actionButton}
+                    style={[styles.actionButton, { borderColor: COLORS.primary + '50' }]}
                     onPress={() => router.push('/(app)/occurrences/create')}
                 >
                     <Text style={styles.actionIcon}>🎙️</Text>
-                    <Text style={styles.actionLabel}>Nova Ocorrência</Text>
+                    <Text style={styles.actionLabel}>Nova{'\n'}Ocorrência</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -106,7 +143,7 @@ export default function DashboardScreen() {
                     onPress={() => router.push('/(app)/occurrences')}
                 >
                     <Text style={styles.actionIcon}>📋</Text>
-                    <Text style={styles.actionLabel}>Ver Todas</Text>
+                    <Text style={styles.actionLabel}>Ver{'\n'}Todas</Text>
                 </TouchableOpacity>
 
                 {isAdmin && (
@@ -124,6 +161,20 @@ export default function DashboardScreen() {
             {(isViceDirector || isAdmin) && stats && stats.length > 0 && (
                 <>
                     <Text style={styles.sectionTitle}>Por Professor</Text>
+                    <View style={styles.legendRow}>
+                        <View style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: COLORS.warning }]} />
+                            <Text style={styles.legendLabel}>Pendentes</Text>
+                        </View>
+                        <View style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: COLORS.error }]} />
+                            <Text style={styles.legendLabel}>Escaladas</Text>
+                        </View>
+                        <View style={styles.legendItem}>
+                            <View style={[styles.legendDot, { backgroundColor: COLORS.success }]} />
+                            <Text style={styles.legendLabel}>Concluídas</Text>
+                        </View>
+                    </View>
                     {stats.map((stat: any) => (
                         <View key={stat.author_id} style={styles.professorRow}>
                             <Text style={styles.professorName}>{stat.author_name}</Text>
@@ -199,15 +250,21 @@ const styles = StyleSheet.create({
         color: COLORS.primary,
     },
     logoutButton: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 10,
         backgroundColor: COLORS.surfaceLight,
+        alignItems: 'center',
+        minWidth: 56,
+    },
+    logoutIcon: {
+        fontSize: 18,
+        marginBottom: 2,
     },
     logoutText: {
-        fontSize: 13,
+        fontSize: 11,
         color: COLORS.textSecondary,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     sectionTitle: {
         fontSize: 17,
@@ -227,6 +284,14 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+    },
+    statLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    statIcon: {
+        fontSize: 22,
     },
     statNumber: {
         fontSize: 28,
@@ -253,6 +318,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: COLORS.border + '30',
+        minHeight: 90,
+        justifyContent: 'center',
     },
     actionIcon: {
         fontSize: 28,
@@ -263,6 +330,25 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: COLORS.textSecondary,
         textAlign: 'center',
+    },
+    legendRow: {
+        flexDirection: 'row',
+        gap: 16,
+        marginBottom: 12,
+    },
+    legendItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    legendDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    legendLabel: {
+        fontSize: 12,
+        color: COLORS.textSecondary,
     },
     professorRow: {
         backgroundColor: COLORS.surface,

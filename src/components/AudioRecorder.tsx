@@ -1,5 +1,5 @@
 // src/components/AudioRecorder.tsx
-// Audio recording component using expo-av with visual feedback
+// Audio recording component using expo-speech-recognition with visual feedback
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
@@ -10,6 +10,7 @@ import {
     Animated,
     ActivityIndicator,
     Platform,
+    Linking,
 } from 'react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { COLORS } from '../lib/constants';
@@ -64,6 +65,7 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
     const [finalTranscript, setFinalTranscript] = useState('');
     const [interimTranscript, setInterimTranscript] = useState('');
     const [permissionGranted, setPermissionGranted] = useState(false);
+    const [permissionDenied, setPermissionDenied] = useState(false);
 
     const pulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -71,18 +73,31 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
     useEffect(() => {
         (async () => {
             const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-            setPermissionGranted(status === 'granted');
+            if (status === 'granted') {
+                setPermissionGranted(true);
+            } else {
+                setPermissionDenied(true);
+            }
         })();
+    }, []);
+
+    const handleRequestPermission = useCallback(async () => {
+        const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+        if (status === 'granted') {
+            setPermissionGranted(true);
+            setPermissionDenied(false);
+        } else {
+            // On iOS/Android, open system settings if already denied
+            if (Platform.OS !== 'web') {
+                Linking.openSettings();
+            }
+        }
     }, []);
 
     useSpeechRecognitionEvent('start', () => setIsRecording(true));
     useSpeechRecognitionEvent('end', () => setIsRecording(false));
     useSpeechRecognitionEvent('error', (event) => {
-        // If it's a "no-match" or "speech-timeout" error, it just means the user paused for too long.
-        // We shouldn't stop recording completely, or if we do due to OS limits, we let the user resume.
-        // However, on iOS, the speech API often stops entirely on silence. 
-        // We'll trust the 'end' event to actually flip isRecording.
-        console.error('Speech recognition error:', event.error, event.message);
+        console.warn('Speech recognition error:', event.error);
     });
 
     useSpeechRecognitionEvent('result', (event) => {
@@ -127,8 +142,6 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
     }, [isRecording, pulseAnim]);
 
     const startRecording = useCallback(async () => {
-        // We DO NOT clear the transcript here! This allows resuming a paused recording.
-        // If it was reviewing, we just go back to recording and append.
         setIsReviewing(false);
         try {
             await ExpoSpeechRecognitionModule.start({
@@ -136,7 +149,7 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
                 interimResults: true,
                 maxAlternatives: 1,
                 continuous: true,
-                requiresOnDeviceRecognition: false, // Fallback to cloud if local model not downloaded
+                requiresOnDeviceRecognition: false,
             });
         } catch (err) {
             console.error('Failed to start speech recognition:', err);
@@ -163,12 +176,18 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
         setIsReviewing(false);
     }, []);
 
-    if (!permissionGranted) {
+    // Permission denied state
+    if (permissionDenied && !permissionGranted) {
         return (
             <View style={styles.container}>
+                <Text style={styles.permissionIcon}>🎙️</Text>
+                <Text style={styles.permissionTitle}>Microfone necessário</Text>
                 <Text style={styles.permissionText}>
-                    Permissão de microfone necessária para gravar áudio.
+                    Para gravar o relato, o aplicativo precisa de acesso ao microfone.
                 </Text>
+                <TouchableOpacity style={styles.permissionButton} onPress={handleRequestPermission}>
+                    <Text style={styles.permissionButtonText}>Permitir Acesso ao Microfone</Text>
+                </TouchableOpacity>
             </View>
         );
     }
@@ -179,8 +198,19 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
 
     return (
         <View style={styles.container}>
+            {/* Instruction banner */}
+            {!isRecording && !isReviewing && !transcript && (
+                <View style={styles.instructionBanner}>
+                    <Text style={styles.instructionText}>
+                        Toque no botão vermelho abaixo para iniciar a gravação.{'\n'}
+                        Fale o relato da ocorrência com seus próprios termos.
+                    </Text>
+                </View>
+            )}
+
             {!!transcript && (
                 <View style={styles.transcriptBox}>
+                    <Text style={styles.transcriptLabel}>Transcrição:</Text>
                     <Text style={[styles.transcriptText, !isRecording && { color: COLORS.textPrimary }]}>
                         {transcript}
                     </Text>
@@ -199,7 +229,7 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
                         style={[styles.reviewBtn, styles.confirmBtn]}
                         onPress={handleConfirm}
                     >
-                        <Text style={styles.confirmBtnText}>✨ Processar</Text>
+                        <Text style={styles.confirmBtnText}>✨ Processar com IA</Text>
                     </TouchableOpacity>
                 </View>
             ) : (
@@ -227,8 +257,10 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
 
                     <Text style={styles.hint}>
                         {isRecording
-                            ? 'Toque para pausar'
-                            : 'Toque para gravar a ocorrência'}
+                            ? '⏹️ Toque para parar a gravação'
+                            : transcript
+                                ? 'Toque para continuar gravando'
+                                : 'Toque para iniciar a gravação'}
                     </Text>
                 </>
             )}
@@ -240,19 +272,27 @@ const styles = StyleSheet.create({
     container: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 32,
+        paddingVertical: 24,
     },
-    duration: {
-        fontSize: 32,
-        fontWeight: '300',
-        color: COLORS.textPrimary,
+    instructionBanner: {
+        backgroundColor: COLORS.primary + '10',
+        borderRadius: 12,
+        padding: 16,
         marginBottom: 24,
-        fontVariant: ['tabular-nums'],
+        width: '100%',
+        borderWidth: 1,
+        borderColor: COLORS.primary + '30',
+    },
+    instructionText: {
+        fontSize: 14,
+        color: COLORS.textSecondary,
+        textAlign: 'center',
+        lineHeight: 22,
     },
     recordButton: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
+        width: 88,
+        height: 88,
+        borderRadius: 44,
         backgroundColor: COLORS.error,
         alignItems: 'center',
         justifyContent: 'center',
@@ -268,8 +308,8 @@ const styles = StyleSheet.create({
         borderColor: COLORS.white,
     },
     stopIcon: {
-        width: 24,
-        height: 24,
+        width: 26,
+        height: 26,
         borderRadius: 4,
         backgroundColor: COLORS.white,
     },
@@ -278,18 +318,42 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     micText: {
-        fontSize: 32,
+        fontSize: 36,
     },
     hint: {
         marginTop: 16,
         fontSize: 14,
         color: COLORS.textSecondary,
+        textAlign: 'center',
+    },
+    permissionIcon: {
+        fontSize: 48,
+        marginBottom: 12,
+    },
+    permissionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: COLORS.textPrimary,
+        marginBottom: 8,
     },
     permissionText: {
         fontSize: 14,
-        color: COLORS.warning,
+        color: COLORS.textSecondary,
         textAlign: 'center',
-        paddingHorizontal: 20,
+        paddingHorizontal: 24,
+        marginBottom: 20,
+        lineHeight: 22,
+    },
+    permissionButton: {
+        backgroundColor: COLORS.primary,
+        borderRadius: 12,
+        paddingHorizontal: 24,
+        paddingVertical: 14,
+    },
+    permissionButtonText: {
+        color: COLORS.white,
+        fontWeight: '700',
+        fontSize: 15,
     },
     processingText: {
         marginTop: 16,
@@ -323,6 +387,14 @@ const styles = StyleSheet.create({
         width: '100%',
         minHeight: 80,
     },
+    transcriptLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: COLORS.textMuted,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 6,
+    },
     transcriptText: {
         fontSize: 16,
         color: COLORS.textSecondary,
@@ -333,12 +405,14 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 16,
+        gap: 12,
         marginTop: 16,
+        width: '100%',
     },
     reviewBtn: {
-        paddingHorizontal: 20,
-        paddingVertical: 12,
+        flex: 1,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
         borderRadius: 12,
         flexDirection: 'row',
         alignItems: 'center',
@@ -351,7 +425,6 @@ const styles = StyleSheet.create({
         color: COLORS.white,
         fontSize: 15,
         fontWeight: 'bold',
-        marginLeft: 8,
     },
     discardBtn: {
         backgroundColor: COLORS.border + '40',
@@ -362,7 +435,6 @@ const styles = StyleSheet.create({
         color: COLORS.error,
         fontSize: 15,
         fontWeight: '600',
-        marginLeft: 8,
     },
 });
 

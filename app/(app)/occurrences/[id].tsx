@@ -20,12 +20,14 @@ import { useProfile } from '../../../src/hooks/useProfile';
 import { StatusBadge } from '../../../src/components/StatusBadge';
 import { AudioRecorder } from '../../../src/components/AudioRecorder';
 import { AIReviewModal } from '../../../src/components/AIReviewModal';
+import { supabase } from '../../../src/lib/supabase';
 import {
     OccurrenceStatus,
     ActionType,
     UserRole,
 } from '../../../src/types/database';
 import { COLORS, ACTION_TYPE_LABELS } from '../../../src/lib/constants';
+import { sendWhatsAppMessage } from '../../../src/services/whatsappService';
 
 export default function OccurrenceDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -40,11 +42,11 @@ export default function OccurrenceDetailScreen() {
     const [treatmentOriginal, setTreatmentOriginal] = useState('');
     const [treatmentFormal, setTreatmentFormal] = useState('');
     const [showReviewModal, setShowReviewModal] = useState(false);
-    const [pendingActionType, setPendingActionType] = useState<'resolve' | 'escalate' | 'vp_resolve'>('resolve');
     const [manualTreatmentText, setManualTreatmentText] = useState('');
     const updateAction = useUpdateAction();
     const [editingActionId, setEditingActionId] = useState<string | null>(null);
     const [editContent, setEditContent] = useState('');
+    const deleteOccurrence = useDeleteOccurrence();
 
     const canTreat = Boolean(
         occurrence &&
@@ -56,6 +58,9 @@ export default function OccurrenceDetailScreen() {
             role === UserRole.ADMIN
         )
     );
+
+    const isVP = role === UserRole.VICE_DIRECTOR;
+    const isAdmin = role === UserRole.ADMIN;
 
     // Handle recorded audio for treatment
     const handleTranscriptionComplete = useCallback(async (text: string) => {
@@ -70,36 +75,27 @@ export default function OccurrenceDetailScreen() {
         }
     }, [processText]);
 
-    const deleteOccurrence = useDeleteOccurrence();
-
     const handleDelete = useCallback(() => {
         if (!occurrence) return;
 
         const performDelete = async () => {
             try {
                 await deleteOccurrence.mutateAsync(occurrence.id);
-                if (Platform.OS === 'web') window.alert('Ocorrência excluída com sucesso.');
-                else Alert.alert('Sucesso', 'Ocorrência excluída com sucesso.');
+                Alert.alert('Sucesso', 'Ocorrência excluída com sucesso.');
                 router.replace('/(app)/occurrences' as any);
             } catch (err: any) {
-                const msg = err.message || 'Falha ao excluir ocorrência.';
-                if (Platform.OS === 'web') window.alert('Erro: ' + msg);
-                else Alert.alert('Erro', msg);
+                Alert.alert('Erro', err.message || 'Falha ao excluir ocorrência.');
             }
         };
 
-        if (Platform.OS === 'web') {
-            if (window.confirm('Deseja realmente excluir esta ocorrência de forma permanente?')) performDelete();
-        } else {
-            Alert.alert(
-                'Confirmar Exclusão',
-                'Deseja realmente excluir esta ocorrência de forma permanente?',
-                [
-                    { text: 'Cancelar', style: 'cancel' },
-                    { text: 'Excluir', style: 'destructive', onPress: performDelete }
-                ]
-            );
-        }
+        Alert.alert(
+            '🗑️ Confirmar Exclusão',
+            'Deseja realmente excluir esta ocorrência de forma permanente? Esta ação não pode ser desfeita.',
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                { text: 'Excluir', style: 'destructive', onPress: performDelete }
+            ]
+        );
     }, [occurrence, deleteOccurrence]);
 
     const handleExportPDF = async () => {
@@ -107,16 +103,53 @@ export default function OccurrenceDetailScreen() {
         try {
             await generateOccurrencePDF(occurrence);
         } catch (err) {
-            if (Platform.OS === 'web') window.alert('Erro ao gerar PDF.');
-            else Alert.alert('Erro', 'Falha ao exportar PDF.');
+            Alert.alert('Erro', 'Falha ao exportar PDF.');
         }
     };
 
-    // Handle text treatment
+    const handleSendWhatsApp = useCallback(() => {
+        if (!occurrence) return;
+        const guardianPhone = occurrence.student?.guardian_phone;
+        if (!guardianPhone) {
+            Alert.alert('Sem número cadastrado', 'Este aluno não possui telefone do responsável cadastrado. Adicione-o na tela de Alunos do painel administrativo.');
+            return;
+        }
+        const lastAction = occurrence.actions && occurrence.actions.length > 0
+            ? occurrence.actions[occurrence.actions.length - 1]
+            : null;
+        const summaryText = lastAction?.description
+            ? `Parecer: ${lastAction.description}`
+            : 'A ocorrência foi concluída pela equipe escolar.';
+        const message = `*Comunicado Escolar — EscolaFlow*\n\nPrezado(a) responsável pelo(a) aluno(a) *${occurrence.student?.name ?? 'N/A'}* da turma *${occurrence.student?.class?.name ?? 'N/A'}*,\n\nInformamos que a ocorrência registrada foi *concluída*.\n\n${summaryText}\n\nQualquer dúvida, entre em contato com a escola.`;
+
+        Alert.alert(
+            '📱 Enviar notificação WhatsApp',
+            `Enviar mensagem ao responsável do(a) ${occurrence.student?.name ?? 'aluno'}?\n\nNúmero: ${guardianPhone}`,
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Enviar',
+                    onPress: async () => {
+                        try {
+                            const result = await sendWhatsAppMessage(guardianPhone, message);
+                            if (result.success) {
+                                Alert.alert('✅ Enviado', 'Mensagem enviada com sucesso ao responsável!');
+                            } else {
+                                Alert.alert('Atenção', 'A mensagem pode não ter sido entregue. Verifique a conexão com o WhatsApp.');
+                            }
+                        } catch (err) {
+                            Alert.alert('Erro', 'Falha ao enviar mensagem WhatsApp.');
+                        }
+                    }
+                },
+            ]
+        );
+    }, [occurrence]);
+
+    // Handle text treatment: process with AI
     const handleTextSubmit = async () => {
         if (!manualTreatmentText.trim()) {
-            if (Platform.OS === 'web') window.alert('Digite a providência primeiro.');
-            else Alert.alert('Aviso', 'Digite os detalhes da providência.');
+            Alert.alert('Aviso', 'Digite os detalhes da providência antes de continuar.');
             return;
         }
         try {
@@ -125,16 +158,15 @@ export default function OccurrenceDetailScreen() {
             setTreatmentFormal(result.formal);
             setShowReviewModal(true);
         } catch (err) {
-            console.error('Text processing error:', err);
             Alert.alert('Erro', 'Falha ao processar texto.');
         }
     };
 
-    // Transfer AI processed text to the manual input field
+    // After AI review, populate manual field with reviewed text
     const handleConfirmReview = useCallback((editedText: string) => {
         setShowReviewModal(false);
         setManualTreatmentText(editedText);
-        setTreatmentFormal(''); // Clear formal so it doesn't trigger the modal loop again
+        setTreatmentFormal('');
     }, []);
 
     // Submit treatment action
@@ -142,8 +174,7 @@ export default function OccurrenceDetailScreen() {
         if (!occurrence || !profileId) return;
 
         if (!manualTreatmentText.trim()) {
-            if (Platform.OS === 'web') window.alert('Digite a providência ou grave um áudio primeiro.');
-            else Alert.alert('Atenção', 'Digite a providência primeiro.');
+            Alert.alert('Atenção', 'Digite ou grave a providência antes de confirmar.');
             return;
         }
 
@@ -170,14 +201,34 @@ export default function OccurrenceDetailScreen() {
                 newStatus,
             });
 
-            if (Platform.OS === 'web') {
-                window.alert('Tratativa registrada com sucesso!');
-                router.back();
-            } else {
-                Alert.alert('Sucesso', 'Tratativa registrada com sucesso!', [
-                    { text: 'OK', onPress: () => router.back() },
-                ]);
+            // Auto-notify all VP users when occurrence is escalated
+            if (actionTypeParam === 'escalate') {
+                supabase
+                    .from('profiles')
+                    .select('whatsapp_number, full_name')
+                    .eq('role', 'vice_director')
+                    .not('whatsapp_number', 'is', null)
+                    .then(({ data: vpProfiles }) => {
+                        if (!vpProfiles || vpProfiles.length === 0) return;
+                        const message =
+                            `*Ocorrência Encaminhada à Vice-Direção*\n\n` +
+                            `Aluno: ${occurrence.student?.name ?? 'N/A'}\n` +
+                            `Turma: ${occurrence.student?.class?.name ?? 'N/A'}\n` +
+                            `Registrada por: ${occurrence.author?.full_name ?? 'N/A'}\n\n` +
+                            `Observação do tutor: ${manualTreatmentText.trim()}\n\n` +
+                            `Acesse o app EscolaFlow para analisar e registrar a devolutiva.`;
+                        vpProfiles.forEach((vp: any) => {
+                            if (vp.whatsapp_number) {
+                                sendWhatsAppMessage(vp.whatsapp_number, message)
+                                    .catch(() => { /* silent */ });
+                            }
+                        });
+                    });
             }
+
+            Alert.alert('✅ Sucesso', 'Tratativa registrada com sucesso!', [
+                { text: 'OK', onPress: () => router.back() },
+            ]);
         } catch (err) {
             Alert.alert('Erro', 'Falha ao registrar a tratativa.');
         }
@@ -189,10 +240,8 @@ export default function OccurrenceDetailScreen() {
             await updateAction.mutateAsync({ id: editingActionId, description: editContent.trim() });
             setEditingActionId(null);
             setEditContent('');
-            if (Platform.OS === 'web') window.alert('Tratativa atualizada com sucesso.');
-            else Alert.alert('Sucesso', 'Tratativa atualizada com sucesso.');
+            Alert.alert('Sucesso', 'Tratativa atualizada com sucesso.');
         } catch (err) {
-            console.error(err);
             Alert.alert('Erro', 'Falha ao atualizar tratativa.');
         }
     };
@@ -201,6 +250,7 @@ export default function OccurrenceDetailScreen() {
         return (
             <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={COLORS.primary} />
+                <Text style={styles.loadingText}>Carregando ocorrência...</Text>
             </View>
         );
     }
@@ -208,7 +258,11 @@ export default function OccurrenceDetailScreen() {
     if (!occurrence) {
         return (
             <View style={styles.loadingContainer}>
+                <Text style={styles.errorIcon}>😕</Text>
                 <Text style={styles.errorText}>Ocorrência não encontrada.</Text>
+                <TouchableOpacity style={styles.backLinkButton} onPress={() => router.back()}>
+                    <Text style={styles.backLinkText}>← Voltar à lista</Text>
+                </TouchableOpacity>
             </View>
         );
     }
@@ -220,6 +274,17 @@ export default function OccurrenceDetailScreen() {
         hour: '2-digit',
         minute: '2-digit',
     });
+
+    // Determine treatment helper text based on role and status
+    const getTreatmentHint = () => {
+        if (isVP || isAdmin) {
+            return 'Como Vice-Diretor(a), você pode registrar a devolutiva e concluir esta ocorrência.';
+        }
+        if (occurrence.status === OccurrenceStatus.PENDING_TUTOR) {
+            return 'Como tutor(a), você pode resolVer esta ocorrência ou encaminhar à Vice-Direção caso precise de suporte.';
+        }
+        return 'Registre a providência tomada e altere o status da ocorrência.';
+    };
 
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -239,11 +304,11 @@ export default function OccurrenceDetailScreen() {
 
                 <View style={styles.metaRow}>
                     <View style={styles.metaItem}>
-                        <Text style={styles.metaLabel}>Autor</Text>
+                        <Text style={styles.metaLabel}>Registrado por</Text>
                         <Text style={styles.metaValue}>{occurrence.author?.full_name ?? '-'}</Text>
                     </View>
                     <View style={styles.metaItem}>
-                        <Text style={styles.metaLabel}>Tutor</Text>
+                        <Text style={styles.metaLabel}>Tutor(a)</Text>
                         <Text style={styles.metaValue}>{occurrence.tutor?.full_name ?? '-'}</Text>
                     </View>
                 </View>
@@ -259,7 +324,7 @@ export default function OccurrenceDetailScreen() {
 
             {/* Original Transcription */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>🎙️ Transcrição Original</Text>
+                <Text style={styles.sectionTitle}>🎙️ Relato Original</Text>
                 <View style={[styles.descriptionBox, styles.originalBox]}>
                     <Text style={[styles.descriptionText, styles.originalText]}>
                         {occurrence.description_original}
@@ -273,7 +338,7 @@ export default function OccurrenceDetailScreen() {
                     <Text style={styles.sectionTitle}>📋 Histórico de Tratativas</Text>
                     {occurrence.actions.map((action, idx) => {
                         const isEditing = editingActionId === action.id;
-                        const canEditAction = Boolean(profileId && (action.author_id === profileId || role === UserRole.ADMIN));
+                        const canEditAction = Boolean(profileId && (action.author_id === profileId || isAdmin));
 
                         return (
                             <View key={action.id} style={styles.timelineItem}>
@@ -282,7 +347,7 @@ export default function OccurrenceDetailScreen() {
                                     <View style={styles.timelineLine} />
                                 )}
                                 <View style={styles.timelineContent}>
-                                    <View style={[styles.timelineHeader, { justifyContent: 'space-between', alignItems: 'flex-start' }]}>
+                                    <View style={styles.timelineHeader}>
                                         <View>
                                             <Text style={styles.timelineType}>
                                                 {ACTION_TYPE_LABELS[action.action_type]}
@@ -302,9 +367,9 @@ export default function OccurrenceDetailScreen() {
                                                     setEditingActionId(action.id);
                                                     setEditContent(action.description);
                                                 }}
-                                                style={{ padding: 4 }}
+                                                style={styles.editActionBtn}
                                             >
-                                                <Text style={{ color: COLORS.primary, fontSize: 16 }}>✏️ Editar</Text>
+                                                <Text style={styles.editActionText}>✏️ Editar</Text>
                                             </TouchableOpacity>
                                         )}
                                     </View>
@@ -315,27 +380,28 @@ export default function OccurrenceDetailScreen() {
                                     {isEditing ? (
                                         <View style={{ marginTop: 8 }}>
                                             <TextInput
-                                                style={{ minHeight: 80, backgroundColor: '#fff', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border }}
+                                                style={styles.editInput}
                                                 multiline
                                                 value={editContent}
                                                 onChangeText={setEditContent}
+                                                textAlignVertical="top"
                                             />
-                                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8, gap: 8 }}>
+                                            <View style={styles.editActions}>
                                                 <TouchableOpacity
                                                     onPress={() => setEditingActionId(null)}
-                                                    style={{ paddingVertical: 6, paddingHorizontal: 12 }}
+                                                    style={styles.editCancelBtn}
                                                 >
-                                                    <Text style={{ color: COLORS.textMuted, fontWeight: '600' }}>Cancelar</Text>
+                                                    <Text style={styles.editCancelText}>Cancelar</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity
                                                     onPress={handleSaveEdit}
                                                     disabled={updateAction.isPending}
-                                                    style={{ backgroundColor: COLORS.primary, paddingVertical: 6, paddingHorizontal: 16, borderRadius: 6 }}
+                                                    style={styles.editSaveBtn}
                                                 >
                                                     {updateAction.isPending ? (
                                                         <ActivityIndicator size="small" color="#fff" />
                                                     ) : (
-                                                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>Salvar</Text>
+                                                        <Text style={styles.editSaveText}>Salvar</Text>
                                                     )}
                                                 </TouchableOpacity>
                                             </View>
@@ -355,49 +421,57 @@ export default function OccurrenceDetailScreen() {
             {/* Treatment Section */}
             {canTreat && !showTreatment && (
                 <View style={styles.treatmentPrompt}>
-                    <Text style={styles.treatmentTitle}>
+                    <Text style={styles.treatmentPromptTitle}>
                         {occurrence.status === OccurrenceStatus.ESCALATED_VP
                             ? '🏢 Devolutiva da Vice-Direção'
                             : '📣 Registrar Tratativa'}
                     </Text>
+                    <Text style={styles.treatmentHint}>{getTreatmentHint()}</Text>
                     <TouchableOpacity
                         style={styles.treatButton}
                         onPress={() => setShowTreatment(true)}
                     >
-                        <Text style={styles.treatButtonText}>📝 Inserir Parecer e Concluir / Encaminhar</Text>
+                        <Text style={styles.treatButtonText}>📝 Registrar Providência</Text>
                     </TouchableOpacity>
                 </View>
             )}
 
             {canTreat && showTreatment && (
                 <View style={styles.treatmentSection}>
-                    <Text style={styles.treatmentTitle}>🎙️ Gravar Providência</Text>
+                    <Text style={styles.treatmentTitle}>
+                        {isVP ? '🏢 Registrar Devolutiva' : '📣 Registrar Providência'}
+                    </Text>
+                    <Text style={styles.treatmentHint}>{getTreatmentHint()}</Text>
 
+                    {/* Audio option */}
+                    <Text style={styles.inputSectionLabel}>🎙️ Gravar o relato da providência (opcional)</Text>
                     <AudioRecorder
                         onTranscriptionComplete={handleTranscriptionComplete}
                         isProcessing={processText.isPending}
                     />
 
-                    <Text style={styles.orDivider}>- OU -</Text>
+                    <Text style={styles.orDivider}>— OU DIGITAR ABAIXO —</Text>
 
+                    <Text style={styles.inputSectionLabel}>✍️ Descreva a providência tomada</Text>
                     <TextInput
                         style={styles.textInput}
                         multiline
-                        placeholder="Digite a providência tomada..."
+                        placeholder="Ex: Realizei conversa com o aluno e seus responsáveis..."
                         placeholderTextColor={COLORS.textMuted}
                         value={manualTreatmentText}
                         onChangeText={setManualTreatmentText}
+                        textAlignVertical="top"
                     />
 
                     <TouchableOpacity
-                        style={[styles.actionBtn, styles.textSubmitBtn, processText.isPending && { opacity: 0.7 }]}
+                        style={[styles.actionBtn, styles.aiBtn, processText.isPending && { opacity: 0.7 }]}
                         onPress={handleTextSubmit}
                         disabled={processText.isPending}
                     >
                         {processText.isPending ? (
                             <ActivityIndicator size="small" color={COLORS.white} />
                         ) : (
-                            <Text style={styles.actionBtnText}>✨ Processar Texto com IA</Text>
+                            <Text style={styles.actionBtnText}>✨ Formatar com IA (opcional)</Text>
                         )}
                     </TouchableOpacity>
 
@@ -407,44 +481,56 @@ export default function OccurrenceDetailScreen() {
                             <TouchableOpacity
                                 style={[styles.actionBtn, styles.resolveBtn]}
                                 onPress={() => {
-                                    handleSubmitAction(role === UserRole.VICE_DIRECTOR ? 'vp_resolve' : 'resolve');
+                                    handleSubmitAction(isVP ? 'vp_resolve' : 'resolve');
                                 }}
                             >
-                                <Text style={styles.actionBtnText}>✅ Concluir</Text>
+                                <Text style={styles.actionBtnText}>✅ Concluir Ocorrência</Text>
                             </TouchableOpacity>
                         )}
-                        {occurrence.status === OccurrenceStatus.PENDING_TUTOR && role !== UserRole.VICE_DIRECTOR && (
+                        {occurrence.status === OccurrenceStatus.PENDING_TUTOR && !isVP && (
                             <TouchableOpacity
                                 style={[styles.actionBtn, styles.escalateBtn]}
                                 onPress={() => {
                                     handleSubmitAction('escalate');
                                 }}
                             >
-                                <Text style={styles.actionBtnText}>⬆️ Escalar para Vice-Direção</Text>
+                                <Text style={styles.actionBtnText}>⬆️ Encaminhar à Vice-Direção</Text>
                             </TouchableOpacity>
                         )}
                     </View>
-                </View>
-            )}
 
-            {role === UserRole.ADMIN && (
-                <View style={styles.adminSection}>
-                    <TouchableOpacity
-                        style={[styles.actionBtn, { backgroundColor: '#FF4444' }]}
-                        onPress={handleDelete}
-                    >
-                        <Text style={styles.actionBtnText}>Excluir Ocorrência</Text>
+                    <TouchableOpacity style={styles.cancelTreatBtn} onPress={() => setShowTreatment(false)}>
+                        <Text style={styles.cancelTreatText}>Cancelar</Text>
                     </TouchableOpacity>
                 </View>
             )}
 
+            {/* Export PDF + WhatsApp notification (concluded only) */}
             {occurrence.status === OccurrenceStatus.CONCLUDED && (
-                <View style={[styles.section, { borderTopWidth: 0, paddingBottom: 0, paddingTop: 10 }]}>
+                <View style={[styles.section, { borderTopWidth: 0, paddingBottom: 0, paddingTop: 10, gap: 10 }]}>
                     <TouchableOpacity
-                        style={styles.actionBtn}
+                        style={[styles.actionBtn, styles.pdfBtn]}
                         onPress={handleExportPDF}
                     >
                         <Text style={styles.actionBtnText}>📄 Exportar Relatório em PDF</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.actionBtn, styles.whatsappBtn]}
+                        onPress={handleSendWhatsApp}
+                    >
+                        <Text style={styles.actionBtnText}>📱 Notificar Responsável via WhatsApp</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {/* Admin: Delete */}
+            {isAdmin && (
+                <View style={styles.adminSection}>
+                    <TouchableOpacity
+                        style={styles.deleteBtn}
+                        onPress={handleDelete}
+                    >
+                        <Text style={styles.deleteBtnText}>🗑️ Excluir Ocorrência Permanentemente</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -481,17 +567,36 @@ const styles = StyleSheet.create({
     },
     content: {
         padding: 20,
-        paddingBottom: 40,
+        paddingBottom: 60,
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: COLORS.background,
+        gap: 12,
+    },
+    loadingText: {
+        fontSize: 14,
+        color: COLORS.textSecondary,
+    },
+    errorIcon: {
+        fontSize: 48,
+        marginBottom: 8,
     },
     errorText: {
         fontSize: 16,
         color: COLORS.textSecondary,
+        marginBottom: 16,
+    },
+    backLinkButton: {
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+    },
+    backLinkText: {
+        color: COLORS.primary,
+        fontWeight: '600',
+        fontSize: 15,
     },
     headerCard: {
         backgroundColor: COLORS.surface,
@@ -602,6 +707,7 @@ const styles = StyleSheet.create({
     timelineHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
+        alignItems: 'flex-start',
         marginBottom: 4,
     },
     timelineType: {
@@ -612,6 +718,7 @@ const styles = StyleSheet.create({
     timelineDate: {
         fontSize: 11,
         color: COLORS.textMuted,
+        marginTop: 2,
     },
     timelineAuthor: {
         fontSize: 12,
@@ -621,47 +728,80 @@ const styles = StyleSheet.create({
     timelineDescription: {
         fontSize: 14,
         color: COLORS.textPrimary,
-        lineHeight: 24,
+        lineHeight: 22,
     },
-    orDivider: {
-        textAlign: 'center',
-        marginVertical: 16,
-        color: COLORS.textMuted,
-        fontWeight: 'bold',
+    editActionBtn: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+    },
+    editActionText: {
+        color: COLORS.primary,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    editInput: {
+        minHeight: 80,
+        backgroundColor: COLORS.background,
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: COLORS.border,
+        color: COLORS.textPrimary,
         fontSize: 14,
     },
-    textInput: {
-        backgroundColor: COLORS.surface,
-        borderRadius: 12,
-        padding: 16,
-        color: COLORS.textPrimary,
-        minHeight: 120,
-        textAlignVertical: 'top',
-        fontSize: 15,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: COLORS.border + '30',
+    editActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginTop: 8,
+        gap: 8,
+    },
+    editCancelBtn: {
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+    },
+    editCancelText: {
+        color: COLORS.textMuted,
+        fontWeight: '600',
+    },
+    editSaveBtn: {
+        backgroundColor: COLORS.primary,
+        paddingVertical: 8,
+        paddingHorizontal: 18,
+        borderRadius: 8,
+        minWidth: 70,
+        alignItems: 'center',
+    },
+    editSaveText: {
+        color: '#fff',
+        fontWeight: '700',
     },
     treatmentPrompt: {
         backgroundColor: COLORS.primary + '10',
         borderRadius: 16,
         padding: 20,
-        alignItems: 'center',
         borderWidth: 1,
         borderColor: COLORS.primary + '30',
         marginTop: 8,
+        marginBottom: 16,
     },
-    treatmentTitle: {
-        fontSize: 16,
+    treatmentPromptTitle: {
+        fontSize: 17,
         fontWeight: '700',
         color: COLORS.textPrimary,
-        marginBottom: 12,
+        marginBottom: 6,
+    },
+    treatmentHint: {
+        fontSize: 14,
+        color: COLORS.textSecondary,
+        lineHeight: 22,
+        marginBottom: 16,
     },
     treatButton: {
         backgroundColor: COLORS.primary,
         borderRadius: 12,
         paddingHorizontal: 24,
-        paddingVertical: 12,
+        paddingVertical: 14,
+        alignItems: 'center',
     },
     treatButtonText: {
         fontSize: 15,
@@ -673,27 +813,66 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         padding: 20,
         marginTop: 8,
+        marginBottom: 16,
         borderWidth: 1,
         borderColor: COLORS.border + '30',
     },
+    treatmentTitle: {
+        fontSize: 17,
+        fontWeight: '700',
+        color: COLORS.textPrimary,
+        marginBottom: 6,
+    },
+    inputSectionLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: COLORS.textSecondary,
+        marginBottom: 8,
+        marginTop: 4,
+    },
+    orDivider: {
+        textAlign: 'center',
+        marginVertical: 16,
+        color: COLORS.textMuted,
+        fontWeight: '700',
+        fontSize: 12,
+        letterSpacing: 1,
+    },
+    textInput: {
+        backgroundColor: COLORS.background,
+        borderRadius: 12,
+        padding: 16,
+        color: COLORS.textPrimary,
+        minHeight: 120,
+        textAlignVertical: 'top',
+        fontSize: 15,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: COLORS.border + '50',
+        lineHeight: 22,
+    },
     actionButtons: {
-        flexDirection: 'row',
-        gap: 12,
+        gap: 10,
         marginTop: 16,
     },
     adminSection: {
         marginTop: 24,
-        paddingHorizontal: 16,
+        marginBottom: 8,
     },
     actionBtn: {
-        flex: 1,
-        paddingVertical: 14,
+        paddingVertical: 16,
         borderRadius: 12,
         alignItems: 'center',
     },
-    textSubmitBtn: {
+    aiBtn: {
         backgroundColor: '#4E5BA6',
-        marginBottom: 20,
+        marginBottom: 4,
+    },
+    pdfBtn: {
+        backgroundColor: COLORS.primary,
+    },
+    whatsappBtn: {
+        backgroundColor: '#25D366',
     },
     resolveBtn: {
         backgroundColor: COLORS.success,
@@ -701,10 +880,33 @@ const styles = StyleSheet.create({
     escalateBtn: {
         backgroundColor: COLORS.warning,
     },
+    deleteBtn: {
+        paddingVertical: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+        backgroundColor: '#FF444415',
+        borderWidth: 1.5,
+        borderColor: COLORS.error,
+    },
+    deleteBtnText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: COLORS.error,
+    },
     actionBtnText: {
         fontSize: 15,
         fontWeight: '700',
         color: COLORS.white,
+    },
+    cancelTreatBtn: {
+        paddingVertical: 12,
+        alignItems: 'center',
+        marginTop: 8,
+    },
+    cancelTreatText: {
+        fontSize: 14,
+        color: COLORS.textMuted,
+        fontWeight: '500',
     },
     savingOverlay: {
         alignItems: 'center',

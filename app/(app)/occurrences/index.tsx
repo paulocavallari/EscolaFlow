@@ -1,7 +1,7 @@
 // app/(app)/occurrences/index.tsx
-// Occurrence list with status filter tabs
+// Occurrence list with status filter tabs and counts
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
     View,
     Text,
@@ -11,15 +11,16 @@ import {
     RefreshControl,
     ActivityIndicator,
 } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { router } from 'expo-router';
 import { useOccurrencesList } from '../../../src/hooks/useOccurrences';
 import { OccurrenceCard } from '../../../src/components/OccurrenceCard';
 import { OccurrenceStatus, OccurrenceWithRelations } from '../../../src/types/database';
-import { COLORS, STATUS_LABELS } from '../../../src/lib/constants';
+import { COLORS } from '../../../src/lib/constants';
 
 type FilterTab = 'all' | OccurrenceStatus;
 
-const TABS: { key: FilterTab; label: string }[] = [
+const TAB_DEFS: { key: FilterTab; label: string }[] = [
     { key: 'all', label: 'Todas' },
     { key: OccurrenceStatus.PENDING_TUTOR, label: 'Pendentes' },
     { key: OccurrenceStatus.ESCALATED_VP, label: 'Escaladas' },
@@ -27,12 +28,38 @@ const TABS: { key: FilterTab; label: string }[] = [
 ];
 
 export default function OccurrenceListScreen() {
+    const { filter } = useLocalSearchParams<{ filter?: string }>();
     const [activeTab, setActiveTab] = useState<FilterTab>('all');
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const statusFilter = activeTab === 'all' ? undefined : activeTab;
 
-    const { data: occurrences, isLoading, refetch } = useOccurrencesList(
-        statusFilter ? { status: statusFilter } : undefined
+    // Apply filter from dashboard navigation (e.g. clicking stat cards)
+    useEffect(() => {
+        if (filter && TAB_DEFS.some((t) => t.key === filter)) {
+            setActiveTab(filter as FilterTab);
+        }
+    }, [filter]);
+
+    const { data: allOccurrences, isLoading, refetch } = useOccurrencesList();
+
+    const handleRefresh = useCallback(async () => {
+        setIsRefreshing(true);
+        await refetch();
+        setIsRefreshing(false);
+    }, [refetch]);
+
+    // Filter client-side for counts without extra queries
+    const filteredOccurrences = (allOccurrences ?? []).filter(
+        (o) => activeTab === 'all' || o.status === activeTab
     );
+
+    const getCounts = (key: FilterTab) => {
+        if (!allOccurrences) return 0;
+        if (key === 'all') return allOccurrences.length;
+        return allOccurrences.filter((o) => o.status === key).length;
+    };
+
+    const TABS = TAB_DEFS.map((t) => ({ ...t, count: getCounts(t.key) }));
 
     const renderOccurrence = ({ item }: { item: OccurrenceWithRelations }) => (
         <OccurrenceCard
@@ -62,25 +89,39 @@ export default function OccurrenceListScreen() {
                         >
                             {tab.label}
                         </Text>
+                        {tab.count > 0 && (
+                            <View style={[
+                                styles.tabBadge,
+                                activeTab === tab.key && styles.tabBadgeActive,
+                            ]}>
+                                <Text style={[
+                                    styles.tabBadgeText,
+                                    activeTab === tab.key && styles.tabBadgeTextActive,
+                                ]}>
+                                    {tab.count}
+                                </Text>
+                            </View>
+                        )}
                     </TouchableOpacity>
                 ))}
             </View>
 
             {/* Occurrence List */}
-            {isLoading ? (
+            {isLoading && !allOccurrences ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={COLORS.primary} />
+                    <Text style={styles.loadingText}>Carregando ocorrências...</Text>
                 </View>
             ) : (
                 <FlatList
-                    data={occurrences}
+                    data={filteredOccurrences}
                     keyExtractor={(item) => item.id}
                     renderItem={renderOccurrence}
                     contentContainerStyle={styles.listContent}
                     refreshControl={
                         <RefreshControl
-                            refreshing={isLoading}
-                            onRefresh={refetch}
+                            refreshing={isRefreshing}
+                            onRefresh={handleRefresh}
                             tintColor={COLORS.primary}
                         />
                     }
@@ -91,20 +132,21 @@ export default function OccurrenceListScreen() {
                             <Text style={styles.emptySubtext}>
                                 {activeTab === 'all'
                                     ? 'Nenhuma ocorrência registrada ainda.'
-                                    : `Nenhuma ocorrência com status "${STATUS_LABELS[activeTab as OccurrenceStatus]}".`}
+                                    : 'Nenhuma ocorrência com este status.'}
                             </Text>
                         </View>
                     }
                 />
             )}
 
-            {/* FAB: New Occurrence */}
+            {/* FAB: New Occurrence — expanded pill for clarity */}
             <TouchableOpacity
                 style={styles.fab}
                 onPress={() => router.push('/(app)/occurrences/create')}
                 activeOpacity={0.8}
             >
-                <Text style={styles.fabText}>+</Text>
+                <Text style={styles.fabIcon}>📝</Text>
+                <Text style={styles.fabText}>Nova Ocorrência</Text>
             </TouchableOpacity>
         </View>
     );
@@ -117,15 +159,18 @@ const styles = StyleSheet.create({
     },
     tabBar: {
         flexDirection: 'row',
-        paddingHorizontal: 16,
+        paddingHorizontal: 12,
         paddingVertical: 12,
-        gap: 8,
+        gap: 6,
     },
     tab: {
-        paddingHorizontal: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 20,
         backgroundColor: COLORS.surface,
+        gap: 5,
     },
     tabActive: {
         backgroundColor: COLORS.primary,
@@ -138,14 +183,38 @@ const styles = StyleSheet.create({
     tabTextActive: {
         color: COLORS.white,
     },
+    tabBadge: {
+        backgroundColor: COLORS.surfaceLight,
+        borderRadius: 10,
+        paddingHorizontal: 6,
+        paddingVertical: 1,
+        minWidth: 20,
+        alignItems: 'center',
+    },
+    tabBadgeActive: {
+        backgroundColor: 'rgba(255,255,255,0.25)',
+    },
+    tabBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: COLORS.textMuted,
+    },
+    tabBadgeTextActive: {
+        color: COLORS.white,
+    },
     listContent: {
         padding: 16,
-        paddingBottom: 100,
+        paddingBottom: 120,
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        gap: 12,
+    },
+    loadingText: {
+        fontSize: 14,
+        color: COLORS.textSecondary,
     },
     emptyContainer: {
         alignItems: 'center',
@@ -170,23 +239,27 @@ const styles = StyleSheet.create({
     fab: {
         position: 'absolute',
         bottom: 24,
-        right: 24,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+        right: 16,
+        left: 16,
+        borderRadius: 16,
         backgroundColor: COLORS.primary,
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+        paddingVertical: 16,
+        gap: 10,
         shadowColor: COLORS.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4,
         shadowRadius: 12,
         elevation: 8,
     },
+    fabIcon: {
+        fontSize: 20,
+    },
     fabText: {
-        fontSize: 28,
+        fontSize: 16,
+        fontWeight: '700',
         color: COLORS.white,
-        fontWeight: '300',
-        marginTop: -2,
     },
 });

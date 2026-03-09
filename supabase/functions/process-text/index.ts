@@ -97,6 +97,9 @@ Texto original:
 
     for (const model of modelsToTry) {
       console.log(`[OpenRouter] Trying model: ${model}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout per model
+
       try {
         rewriteResponse = await fetch(
           "https://openrouter.ai/api/v1/chat/completions",
@@ -119,8 +122,10 @@ Texto original:
               temperature: 0.2,
               max_tokens: 1024,
             }),
+            signal: controller.signal
           }
         );
+        clearTimeout(timeoutId);
 
         if (rewriteResponse.ok) {
           usedModel = model;
@@ -131,8 +136,10 @@ Texto original:
         console.warn(`[OpenRouter] Model ${model} failed (HTTP ${rewriteResponse.status}):`, errBody);
         fallbackError = errBody;
       } catch (fetchErr: any) {
-        console.error(`[OpenRouter] Exception on model ${model}:`, fetchErr.message);
-        fallbackError = fetchErr.message;
+        clearTimeout(timeoutId);
+        const isTimeout = fetchErr.name === 'AbortError';
+        console.error(`[OpenRouter] Exception on model ${model}:`, isTimeout ? 'Timed out after 4s' : fetchErr.message);
+        fallbackError = isTimeout ? 'Timeout' : fetchErr.message;
       }
     }
 

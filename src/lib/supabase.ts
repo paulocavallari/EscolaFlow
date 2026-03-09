@@ -17,6 +17,13 @@ export const supabaseAnonKey =
     process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3aGpqc3hxb29nbWNhaXJlc3ViIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE0NDY5OTUsImV4cCI6MjA4NzAyMjk5NX0.pF9Chqbex0EUqPg8BeN2uHmofCqswHVXcQMQi8Jz1u4';
 
+// Service role key — used ONLY in admin operations within the app.
+// NOTE: In a fully secure deployment, admin operations should be performed
+// server-side (Edge Functions). This key is read from .env and NOT committed to source control.
+export const supabaseServiceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ?? '';
+
 if (!supabaseUrl || !supabaseAnonKey) {
     console.warn(
         'Missing Supabase environment variables. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env file.'
