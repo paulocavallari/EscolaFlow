@@ -32,18 +32,33 @@ export async function sendWhatsAppMessage(phone: string, text: string): Promise<
 
         const formattedPhone = formatPhone(phone);
 
-        const { data, error } = await supabase.functions.invoke('send-whatsapp-manual', {
-            body: {
-                phone: formattedPhone,
-                text,
-            }
-        });
+        // Get the current session token explicitly
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData?.session?.access_token;
 
-        if (error) {
-            console.error('Supabase Invoke Error:', error);
-            return { success: false, error: error.message };
+        if (!token) {
+            console.warn('WhatsApp service: No auth token available');
+            return { success: false, error: 'Not authenticated' };
         }
 
+        // Use explicit fetch with Authorization header to ensure JWT is passed correctly
+        const response = await fetch(`${supabaseUrl}/functions/v1/send-whatsapp-manual`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'apikey': supabaseAnonKey,
+            },
+            body: JSON.stringify({ phone: formattedPhone, text }),
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            console.error(`WhatsApp function error (${response.status}):`, errText);
+            return { success: false, error: `HTTP ${response.status}: ${errText}` };
+        }
+
+        const data = await response.json();
         return { success: true, data };
 
     } catch (error: any) {
