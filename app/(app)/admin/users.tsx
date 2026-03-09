@@ -198,6 +198,7 @@ export default function UsersScreen() {
                     email: newEmail,
                     role: newRole,
                     whatsapp_number: newWhatsApp.trim() || null,
+                    force_password_change: true,
                 });
 
             if (profileError) {

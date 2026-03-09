@@ -81,16 +81,16 @@ export default function OccurrenceDetailScreen() {
         const performDelete = async () => {
             try {
                 await deleteOccurrence.mutateAsync(occurrence.id);
-                Alert.alert('Sucesso', 'Ocorr├¬ncia exclu├¡da com sucesso.');
+                Alert.alert('Sucesso', 'Ocorrência excluída com sucesso.');
                 router.replace('/(app)/occurrences' as any);
             } catch (err: any) {
-                Alert.alert('Erro', err.message || 'Falha ao excluir ocorr├¬ncia.');
+                Alert.alert('Erro', err.message || 'Falha ao excluir ocorrência.');
             }
         };
 
         Alert.alert(
-            '≡ƒùæ∩╕Å Confirmar Exclus├úo',
-            'Deseja realmente excluir esta ocorr├¬ncia de forma permanente? Esta a├º├úo n├úo pode ser desfeita.',
+            '🗑️ Confirmar Exclusão',
+            'Deseja realmente excluir esta ocorrência de forma permanente? Esta ação não pode ser desfeita.',
             [
                 { text: 'Cancelar', style: 'cancel' },
                 { text: 'Excluir', style: 'destructive', onPress: performDelete }
@@ -111,7 +111,7 @@ export default function OccurrenceDetailScreen() {
         if (!occurrence) return;
         const guardianPhone = occurrence.student?.guardian_phone;
         if (!guardianPhone) {
-            Alert.alert('Sem n├║mero cadastrado', 'Este aluno n├úo possui telefone do respons├ível cadastrado. Adicione-o na tela de Alunos do painel administrativo.');
+            Alert.alert('Sem número cadastrado', 'Este aluno não possui telefone do responsável cadastrado. Adicione-o na tela de Alunos do painel administrativo.');
             return;
         }
         const lastAction = occurrence.actions && occurrence.actions.length > 0
@@ -119,12 +119,12 @@ export default function OccurrenceDetailScreen() {
             : null;
         const summaryText = lastAction?.description
             ? `Parecer: ${lastAction.description}`
-            : 'A ocorr├¬ncia foi conclu├¡da pela equipe escolar.';
-        const message = `*Comunicado Escolar ΓÇö EscolaFlow*\n\nPrezado(a) respons├ível pelo(a) aluno(a) *${occurrence.student?.name ?? 'N/A'}* da turma *${occurrence.student?.class?.name ?? 'N/A'}*,\n\nInformamos que a ocorr├¬ncia registrada foi *conclu├¡da*.\n\n${summaryText}\n\nQualquer d├║vida, entre em contato com a escola.`;
+            : 'A ocorrência foi concluída pela equipe escolar.';
+        const message = `*Comunicado Escolar — EscolaFlow*\n\nPrezado(a) responsável pelo(a) aluno(a) *${occurrence.student?.name ?? 'N/A'}* da turma *${occurrence.student?.class?.name ?? 'N/A'}*,\n\nInformamos que a ocorrência registrada foi *concluída*.\n\n${summaryText}\n\nQualquer dúvida, entre em contato com a escola.`;
 
         Alert.alert(
-            '≡ƒô▒ Enviar notifica├º├úo WhatsApp',
-            `Enviar mensagem ao respons├ível do(a) ${occurrence.student?.name ?? 'aluno'}?\n\nN├║mero: ${guardianPhone}`,
+            '📱 Enviar notificação WhatsApp',
+            `Enviar mensagem ao responsável do(a) ${occurrence.student?.name ?? 'aluno'}?\n\nNúmero: ${guardianPhone}`,
             [
                 { text: 'Cancelar', style: 'cancel' },
                 {
@@ -133,9 +133,9 @@ export default function OccurrenceDetailScreen() {
                         try {
                             const result = await sendWhatsAppMessage(guardianPhone, message);
                             if (result.success) {
-                                Alert.alert('Γ£à Enviado', 'Mensagem enviada com sucesso ao respons├ível!');
+                                Alert.alert('✔ Enviado', 'Mensagem enviada com sucesso ao responsável!');
                             } else {
-                                Alert.alert('Aten├º├úo', 'A mensagem pode n├úo ter sido entregue. Verifique a conex├úo com o WhatsApp.');
+                                Alert.alert('Atenção', 'A mensagem pode não ter sido entregue. Verifique a conexão com o WhatsApp.');
                             }
                         } catch (err) {
                             Alert.alert('Erro', 'Falha ao enviar mensagem WhatsApp.');
@@ -149,7 +149,7 @@ export default function OccurrenceDetailScreen() {
     // Handle text treatment: process with AI
     const handleTextSubmit = async () => {
         if (!manualTreatmentText.trim()) {
-            Alert.alert('Aviso', 'Digite os detalhes da provid├¬ncia antes de continuar.');
+            Alert.alert('Aviso', 'Digite os detalhes da providência antes de continuar.');
             return;
         }
         try {
@@ -174,7 +174,7 @@ export default function OccurrenceDetailScreen() {
         if (!occurrence || !profileId) return;
 
         if (!manualTreatmentText.trim()) {
-            Alert.alert('Aten├º├úo', 'Digite ou grave a provid├¬ncia antes de confirmar.');
+            Alert.alert('Atenção', 'Digite ou grave a providência antes de confirmar.');
             return;
         }
 
@@ -211,11 +211,11 @@ export default function OccurrenceDetailScreen() {
                     .then(({ data: vpProfiles }) => {
                         if (!vpProfiles || vpProfiles.length === 0) return;
                         const message =
-                            `*Ocorr├¬ncia Encaminhada ├á Vice-Dire├º├úo*\n\n` +
+                            `*Ocorrência Encaminhada à Vice-Direção*\n\n` +
                             `Aluno: ${occurrence.student?.name ?? 'N/A'}\n` +
                             `Turma: ${occurrence.student?.class?.name ?? 'N/A'}\n` +
                             `Registrada por: ${occurrence.author?.full_name ?? 'N/A'}\n\n` +
-                            `Observa├º├úo do tutor: ${manualTreatmentText.trim()}\n\n` +
+                            `Observação do tutor: ${manualTreatmentText.trim()}\n\n` +
                             `Acesse o app EscolaFlow para analisar e registrar a devolutiva.`;
                         vpProfiles.forEach((vp: any) => {
                             if (vp.whatsapp_number) {
@@ -226,7 +226,7 @@ export default function OccurrenceDetailScreen() {
                     });
             }
 
-            Alert.alert('Γ£à Sucesso', 'Tratativa registrada com sucesso!', [
+            Alert.alert('✅ Sucesso', 'Tratativa registrada com sucesso!', [
                 { text: 'OK', onPress: () => router.back() },
             ]);
         } catch (err) {
@@ -250,7 +250,7 @@ export default function OccurrenceDetailScreen() {
         return (
             <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={COLORS.primary} />
-                <Text style={styles.loadingText}>Carregando ocorr├¬ncia...</Text>
+                <Text style={styles.loadingText}>Carregando ocorrência...</Text>
             </View>
         );
     }
@@ -258,10 +258,10 @@ export default function OccurrenceDetailScreen() {
     if (!occurrence) {
         return (
             <View style={styles.loadingContainer}>
-                <Text style={styles.errorIcon}>≡ƒÿò</Text>
-                <Text style={styles.errorText}>Ocorr├¬ncia n├úo encontrada.</Text>
+                <Text style={styles.errorIcon}>😔</Text>
+                <Text style={styles.errorText}>Ocorrência não encontrada.</Text>
                 <TouchableOpacity style={styles.backLinkButton} onPress={() => router.back()}>
-                    <Text style={styles.backLinkText}>ΓåÉ Voltar ├á lista</Text>
+                    <Text style={styles.backLinkText}>← Voltar à lista</Text>
                 </TouchableOpacity>
             </View>
         );

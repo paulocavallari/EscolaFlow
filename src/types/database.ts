@@ -35,6 +35,7 @@ export interface Profile {
     whatsapp_number: string | null;
     email: string | null;
     active: boolean;
+    force_password_change: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -110,6 +111,7 @@ export interface ProfileInsert {
     role: UserRole;
     whatsapp_number?: string | null;
     email?: string | null;
+    force_password_change?: boolean;
 }
 
 export interface ClassInsert {

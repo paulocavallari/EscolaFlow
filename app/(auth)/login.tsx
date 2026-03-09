@@ -1,7 +1,7 @@
 // app/(auth)/login.tsx
 // Login screen with email/password
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
     View,
     Text,
@@ -22,6 +22,7 @@ export default function LoginScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const passwordRef = useRef<TextInput>(null);
 
     // Redirect if already logged in
     React.useEffect(() => {
@@ -72,18 +73,24 @@ export default function LoginScreen() {
                             keyboardType="email-address"
                             autoCapitalize="none"
                             autoCorrect={false}
+                            returnKeyType="next"
+                            onSubmitEditing={() => passwordRef.current?.focus()}
+                            blurOnSubmit={false}
                         />
                     </View>
 
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Senha</Text>
                         <TextInput
+                            ref={passwordRef}
                             style={styles.input}
                             value={password}
                             onChangeText={setPassword}
                             placeholder="••••••••"
                             placeholderTextColor={COLORS.textMuted}
                             secureTextEntry
+                            returnKeyType="done"
+                            onSubmitEditing={handleLogin}
                         />
                     </View>
 

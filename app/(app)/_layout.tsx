@@ -25,6 +25,11 @@ export default function AppLayout() {
         return <Redirect href="/(auth)/login" />;
     }
 
+    // Redirect to change password if this is the first login after admin creation
+    if (profile?.force_password_change) {
+        return <Redirect href="/(auth)/change-password" />;
+    }
+
     const isAdmin = profile?.role === UserRole.ADMIN;
     const isVP = profile?.role === UserRole.VICE_DIRECTOR;
 

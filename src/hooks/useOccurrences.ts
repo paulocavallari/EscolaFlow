@@ -139,8 +139,9 @@ export function useAddAction() {
 
             if (statusError) throw statusError;
         },
-        onSuccess: () => {
+        onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: OCCURRENCE_KEYS.all });
+            queryClient.invalidateQueries({ queryKey: OCCURRENCE_KEYS.detail(variables.occurrence_id) });
         },
     });
 }
