@@ -189,6 +189,7 @@ export default function CreateOccurrenceScreen() {
             });
         } catch (err) {
             console.error('Error on create:', err);
+            Alert.alert('Erro', err instanceof Error ? err.message : 'Falha ao salvar a ocorrência. Tente novamente.');
         }
     }, [selectedStudent, profileId, originalText, createOccurrence]);
 

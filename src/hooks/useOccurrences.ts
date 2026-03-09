@@ -98,7 +98,10 @@ export function useCreateOccurrence() {
 
     return useMutation({
         mutationFn: async (input: OccurrenceInsert): Promise<Occurrence> => {
-            const { data, error } = await supabase
+            const TIMEOUT_MS = 15_000; // 15 seconds
+
+            // Race the insert against a timeout to prevent infinite spinner
+            const insertPromise = supabase
                 .from('occurrences')
                 .insert({
                     ...input,
@@ -106,6 +109,12 @@ export function useCreateOccurrence() {
                 })
                 .select()
                 .single();
+
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                setTimeout(() => reject(new Error('O salvamento demorou demais. Verifique sua conexão e tente novamente.')), TIMEOUT_MS);
+            });
+
+            const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
 
             if (error) throw error;
             return data as Occurrence;
