@@ -183,15 +183,28 @@ export function useDeleteOccurrence() {
 
     return useMutation({
         mutationFn: async (id: string): Promise<void> => {
-            const { error } = await supabase
-                .from('occurrences')
-                .delete()
-                .eq('id', id);
+            // Get the current session token
+            const { data: sessionData } = await supabase.auth.getSession();
+            const token = sessionData?.session?.access_token;
 
-            if (error) throw error;
+            if (!token) throw new Error('Não autenticado. Faça login novamente.');
+
+            const response = await fetch(`${supabaseUrl}/functions/v1/delete-occurrence`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'apikey': supabaseAnonKey,
+                },
+                body: JSON.stringify({ occurrence_id: id }),
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+                throw new Error(errData.error || 'Falha ao excluir ocorrência.');
+            }
         },
         onSuccess: () => {
-            // Invalidate the cache to ensure list refetches
             queryClient.invalidateQueries({ queryKey: OCCURRENCE_KEYS.lists() });
         },
     });
