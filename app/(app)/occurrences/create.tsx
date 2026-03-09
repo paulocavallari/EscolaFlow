@@ -144,52 +144,73 @@ export default function CreateOccurrenceScreen() {
         if (!selectedStudent || !profileId) return;
 
         if (!editedText.trim()) {
-            Alert.alert('Aviso', 'O texto da ocorrência não pode ficar vazio.');
+            if (Platform.OS === 'web') {
+                window.alert('O texto da ocorrência não pode ficar vazio.');
+            } else {
+                Alert.alert('Aviso', 'O texto da ocorrência não pode ficar vazio.');
+            }
             return;
         }
 
         try {
-            await createOccurrence.mutateAsync({
+            const newOccurrence = await createOccurrence.mutateAsync({
                 student_id: selectedStudent.id,
                 author_id: profileId,
                 tutor_id: selectedStudent.tutor_id,
                 description_original: originalText,
                 description_formal: editedText,
-            }, {
-                onSuccess: (newOccurrence) => {
-                    // Auto-notify tutor via WhatsApp (fire-and-forget)
-                    if (selectedStudent.tutor?.whatsapp_number) {
-                        const message =
-                            `*Nova Ocorrência Escolar*\n\n` +
-                            `Aluno: ${selectedStudent.name}\n` +
-                            `Turma: ${selectedStudent.class?.name || 'N/A'}\n\n` +
-                            `Resumo: ${editedText}\n\n` +
-                            `Acesse o app EscolaFlow para mais detalhes e para registrar a tratativa.`;
-                        sendWhatsAppMessage(selectedStudent.tutor.whatsapp_number, message)
-                            .catch(() => { /* silent — notification failure doesn't block the flow */ });
-                    }
-
-                    // Reset state
-                    setManualText('');
-                    setOriginalText('');
-                    setFormalText('');
-                    setStep('select_student');
-                    setSelectedStudent(null);
-
-                    Alert.alert('✅ Sucesso', 'Ocorrência registrada com sucesso!', [
-                        {
-                            text: 'Ver Ocorrência',
-                            onPress: () => router.replace(`/(app)/occurrences/${newOccurrence.id}`)
-                        },
-                    ]);
-                },
-                onError: () => {
-                    Alert.alert('Erro', 'Falha ao salvar a ocorrência. Tente novamente.');
-                }
             });
+
+            // Auto-notify tutor via WhatsApp (fire-and-forget)
+            if (selectedStudent.tutor?.whatsapp_number) {
+                const message =
+                    `*Nova Ocorrência Escolar*\n\n` +
+                    `Aluno: ${selectedStudent.name}\n` +
+                    `Turma: ${selectedStudent.class?.name || 'N/A'}\n\n` +
+                    `Resumo: ${editedText}\n\n` +
+                    `Acesse o app EscolaFlow para mais detalhes e para registrar a tratativa.`;
+                sendWhatsAppMessage(selectedStudent.tutor.whatsapp_number, message)
+                    .catch(() => { /* silent — notification failure doesn't block the flow */ });
+            }
+
+            // Show success confirmation BEFORE resetting state
+            if (Platform.OS === 'web') {
+                const viewOccurrence = window.confirm(
+                    '✅ Ocorrência registrada com sucesso!\n\nDeseja ver a ocorrência?'
+                );
+                // Reset state
+                setManualText('');
+                setOriginalText('');
+                setFormalText('');
+                setStep('select_student');
+                setSelectedStudent(null);
+
+                if (viewOccurrence) {
+                    router.replace(`/(app)/occurrences/${newOccurrence.id}`);
+                }
+            } else {
+                Alert.alert('✅ Sucesso', 'Ocorrência registrada com sucesso!', [
+                    {
+                        text: 'Ver Ocorrência',
+                        onPress: () => {
+                            setManualText('');
+                            setOriginalText('');
+                            setFormalText('');
+                            setStep('select_student');
+                            setSelectedStudent(null);
+                            router.replace(`/(app)/occurrences/${newOccurrence.id}`);
+                        }
+                    },
+                ]);
+            }
         } catch (err) {
             console.error('Error on create:', err);
-            Alert.alert('Erro', err instanceof Error ? err.message : 'Falha ao salvar a ocorrência. Tente novamente.');
+            const errorMsg = err instanceof Error ? err.message : 'Falha ao salvar a ocorrência. Tente novamente.';
+            if (Platform.OS === 'web') {
+                window.alert(`Erro: ${errorMsg}`);
+            } else {
+                Alert.alert('Erro', errorMsg);
+            }
         }
     }, [selectedStudent, profileId, originalText, createOccurrence]);
 
