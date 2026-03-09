@@ -75,27 +75,64 @@ export default function OccurrenceDetailScreen() {
         }
     }, [processText]);
 
-    const handleDelete = useCallback(() => {
+    const handleDelete = useCallback(async () => {
         if (!occurrence) return;
 
         const performDelete = async () => {
             try {
                 await deleteOccurrence.mutateAsync(occurrence.id);
-                Alert.alert('Sucesso', 'Ocorrência excluída com sucesso.');
+                if (Platform.OS === 'web') {
+                    window.alert('Ocorrência excluída com sucesso.');
+                } else {
+                    Alert.alert('Sucesso', 'Ocorrência excluída com sucesso.');
+                }
                 router.replace('/(app)/occurrences' as any);
             } catch (err: any) {
-                Alert.alert('Erro', err.message || 'Falha ao excluir ocorrência.');
+                const msg = err.message || 'Falha ao excluir ocorrência.';
+                if (Platform.OS === 'web') {
+                    window.alert(`Erro: ${msg}`);
+                } else {
+                    Alert.alert('Erro', msg);
+                }
             }
         };
 
-        Alert.alert(
-            '🗑️ Confirmar Exclusão',
-            'Deseja realmente excluir esta ocorrência de forma permanente? Esta ação não pode ser desfeita.',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                { text: 'Excluir', style: 'destructive', onPress: performDelete }
-            ]
-        );
+        if (Platform.OS === 'web') {
+            // Double verification on web
+            const first = window.confirm(
+                '🗑️ Deseja realmente excluir esta ocorrência de forma permanente?\n\nEsta ação NÃO pode ser desfeita.'
+            );
+            if (!first) return;
+
+            const second = window.confirm(
+                '⚠️ CONFIRMAÇÃO FINAL\n\nTem CERTEZA ABSOLUTA? Todos os dados desta ocorrência serão perdidos permanentemente.'
+            );
+            if (!second) return;
+
+            await performDelete();
+        } else {
+            Alert.alert(
+                '🗑️ Confirmar Exclusão',
+                'Deseja realmente excluir esta ocorrência de forma permanente? Esta ação não pode ser desfeita.',
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                        text: 'Excluir',
+                        style: 'destructive',
+                        onPress: () => {
+                            Alert.alert(
+                                '⚠️ Confirmação Final',
+                                'Tem CERTEZA ABSOLUTA? Todos os dados serão perdidos permanentemente.',
+                                [
+                                    { text: 'Cancelar', style: 'cancel' },
+                                    { text: 'Sim, Excluir', style: 'destructive', onPress: performDelete },
+                                ]
+                            );
+                        }
+                    }
+                ]
+            );
+        }
     }, [occurrence, deleteOccurrence]);
 
     const handleExportPDF = async () => {
@@ -107,11 +144,15 @@ export default function OccurrenceDetailScreen() {
         }
     };
 
-    const handleSendWhatsApp = useCallback(() => {
+    const handleSendWhatsApp = useCallback(async () => {
         if (!occurrence) return;
         const guardianPhone = occurrence.student?.guardian_phone;
         if (!guardianPhone) {
-            Alert.alert('Sem número cadastrado', 'Este aluno não possui telefone do responsável cadastrado. Adicione-o na tela de Alunos do painel administrativo.');
+            if (Platform.OS === 'web') {
+                window.alert('Este aluno não possui telefone do responsável cadastrado. Adicione-o na tela de Alunos do painel administrativo.');
+            } else {
+                Alert.alert('Sem número cadastrado', 'Este aluno não possui telefone do responsável cadastrado. Adicione-o na tela de Alunos do painel administrativo.');
+            }
             return;
         }
         const lastAction = occurrence.actions && occurrence.actions.length > 0
@@ -122,28 +163,48 @@ export default function OccurrenceDetailScreen() {
             : 'A ocorrência foi concluída pela equipe escolar.';
         const message = `*Comunicado Escolar — EscolaFlow*\n\nPrezado(a) responsável pelo(a) aluno(a) *${occurrence.student?.name ?? 'N/A'}* da turma *${occurrence.student?.class?.name ?? 'N/A'}*,\n\nInformamos que a ocorrência registrada foi *concluída*.\n\n${summaryText}\n\nQualquer dúvida, entre em contato com a escola.`;
 
-        Alert.alert(
-            '📱 Enviar notificação WhatsApp',
-            `Enviar mensagem ao responsável do(a) ${occurrence.student?.name ?? 'aluno'}?\n\nNúmero: ${guardianPhone}`,
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Enviar',
-                    onPress: async () => {
-                        try {
-                            const result = await sendWhatsAppMessage(guardianPhone, message);
-                            if (result.success) {
-                                Alert.alert('✔ Enviado', 'Mensagem enviada com sucesso ao responsável!');
-                            } else {
-                                Alert.alert('Atenção', 'A mensagem pode não ter sido entregue. Verifique a conexão com o WhatsApp.');
-                            }
-                        } catch (err) {
-                            Alert.alert('Erro', 'Falha ao enviar mensagem WhatsApp.');
-                        }
+        const doSend = async () => {
+            try {
+                const result = await sendWhatsAppMessage(guardianPhone, message);
+                if (result.success) {
+                    if (Platform.OS === 'web') {
+                        window.alert('✔ Mensagem enviada com sucesso ao responsável!');
+                    } else {
+                        Alert.alert('✔ Enviado', 'Mensagem enviada com sucesso ao responsável!');
                     }
-                },
-            ]
-        );
+                } else {
+                    if (Platform.OS === 'web') {
+                        window.alert('A mensagem pode não ter sido entregue. Verifique a conexão com o WhatsApp.');
+                    } else {
+                        Alert.alert('Atenção', 'A mensagem pode não ter sido entregue. Verifique a conexão com o WhatsApp.');
+                    }
+                }
+            } catch (err) {
+                if (Platform.OS === 'web') {
+                    window.alert('Falha ao enviar mensagem WhatsApp.');
+                } else {
+                    Alert.alert('Erro', 'Falha ao enviar mensagem WhatsApp.');
+                }
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            const confirmed = window.confirm(
+                `📱 Enviar notificação WhatsApp ao responsável do(a) ${occurrence.student?.name ?? 'aluno'}?\n\nNúmero: ${guardianPhone}`
+            );
+            if (confirmed) {
+                await doSend();
+            }
+        } else {
+            Alert.alert(
+                '📱 Enviar notificação WhatsApp',
+                `Enviar mensagem ao responsável do(a) ${occurrence.student?.name ?? 'aluno'}?\n\nNúmero: ${guardianPhone}`,
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { text: 'Enviar', onPress: doSend },
+                ]
+            );
+        }
     }, [occurrence]);
 
     // Handle text treatment: process with AI
@@ -278,12 +339,12 @@ export default function OccurrenceDetailScreen() {
     // Determine treatment helper text based on role and status
     const getTreatmentHint = () => {
         if (isVP || isAdmin) {
-            return 'Como Vice-Diretor(a), voc├¬ pode registrar a devolutiva e concluir esta ocorr├¬ncia.';
+            return 'Como Vice-Diretor(a), você pode registrar a devolutiva e concluir esta ocorrência.';
         }
         if (occurrence.status === OccurrenceStatus.PENDING_TUTOR) {
-            return 'Como tutor(a), voc├¬ pode resolVer esta ocorr├¬ncia ou encaminhar ├á Vice-Dire├º├úo caso precise de suporte.';
+            return 'Como tutor(a), você pode resolver esta ocorrência ou encaminhar à Vice-Direção caso precise de suporte.';
         }
-        return 'Registre a provid├¬ncia tomada e altere o status da ocorr├¬ncia.';
+        return 'Registre a providência tomada e altere o status da ocorrência.';
     };
 
     return (
