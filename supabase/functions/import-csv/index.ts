@@ -27,8 +27,12 @@ function parseCSV(csvText: string): CSVRow[] {
     const lines = csvText.trim().split('\n');
     if (lines.length < 2) return [];
 
+    // Auto-detect delimiter: semicolon or comma
+    const headerLine = lines[0];
+    const delimiter = headerLine.includes(';') ? ';' : ',';
+
     // Parse header (case-insensitive)
-    const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
+    const headers = headerLine.split(delimiter).map((h) => h.trim().toLowerCase().replace(/[\ufeff]/g, ''));
     const nameIdx = headers.findIndex((h) => ['nome', 'name'].includes(h));
     const matriculaIdx = headers.findIndex((h) => ['matricula', 'enrollment'].includes(h));
     const turmaIdx = headers.findIndex((h) => ['turmaid', 'turma_id', 'class_id', 'classid'].includes(h));
@@ -40,7 +44,7 @@ function parseCSV(csvText: string): CSVRow[] {
 
     const rows: CSVRow[] = [];
     for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map((c) => c.trim());
+        const cols = lines[i].split(delimiter).map((c) => c.trim());
         if (cols.length < 3 || !cols[nameIdx]) continue;
 
         rows.push({
