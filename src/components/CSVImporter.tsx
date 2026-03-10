@@ -55,7 +55,7 @@ export function CSVImporter() {
         <View style={styles.container}>
             <Text style={styles.title}>📥 Importar Alunos via CSV</Text>
             <Text style={styles.subtitle}>
-                Colunas aceitas: Nome, Matricula, TurmaID, TutorID
+                Colunas aceitas: Nome, RA, TurmaID
             </Text>
 
             {/* File Picker */}

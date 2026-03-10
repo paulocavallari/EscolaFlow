@@ -34,12 +34,12 @@ function parseCSV(csvText: string): CSVRow[] {
     // Parse header (case-insensitive)
     const headers = headerLine.split(delimiter).map((h) => h.trim().toLowerCase().replace(/[\ufeff]/g, ''));
     const nameIdx = headers.findIndex((h) => ['nome', 'name'].includes(h));
-    const matriculaIdx = headers.findIndex((h) => ['matricula', 'enrollment'].includes(h));
+    const matriculaIdx = headers.findIndex((h) => ['ra', 'matricula', 'enrollment'].includes(h));
     const turmaIdx = headers.findIndex((h) => ['turmaid', 'turma_id', 'class_id', 'classid'].includes(h));
     const tutorIdx = headers.findIndex((h) => ['tutorid', 'tutor_id'].includes(h));
 
     if (nameIdx === -1 || matriculaIdx === -1 || turmaIdx === -1) {
-        throw new Error('CSV must have columns: Nome, Matricula, TurmaID (and optionally TutorID)');
+        throw new Error('CSV must have columns: Nome, RA, TurmaID (and optionally TutorID)');
     }
 
     const rows: CSVRow[] = [];
@@ -195,7 +195,7 @@ serve(async (req: Request) => {
             if (insertError) {
                 if (insertError.code === '23505') {
                     // Unique violation (duplicate matricula)
-                    result.errors.push({ row: rowNum, message: `Matrícula "${row.matricula}" já existe` });
+                    result.errors.push({ row: rowNum, message: `RA "${row.matricula}" já existe` });
                     result.skipped++;
                 } else {
                     result.errors.push({ row: rowNum, message: insertError.message });

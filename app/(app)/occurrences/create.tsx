@@ -44,7 +44,7 @@ const StudentItem = memo(function StudentItem({
                 <Text style={styles.studentName}>{student.name}</Text>
                 <Text style={styles.studentMeta}>
                     {student.class?.name ?? 'Turma não definida'}
-                    {student.matricula ? ` · Mat: ${student.matricula}` : ''}
+                    {student.matricula ? ` · RA: ${student.matricula}` : ''}
                 </Text>
             </View>
             {isSelected && <Text style={styles.checkMark}>✓</Text>}

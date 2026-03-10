@@ -146,7 +146,7 @@ export default function StudentsScreen() {
             <View style={styles.cardContent}>
                 <Text style={styles.cardName}>{item.name}</Text>
                 <Text style={styles.cardSub}>
-                    {item.class?.name ?? 'Sem turma'} • {item.matricula ?? 'Sem matrícula'}
+                    {item.class?.name ?? 'Sem turma'} • {item.matricula ?? 'Sem RA'}
                     {item.guardian_phone ? ` • WhatsApp Pai: ${item.guardian_phone}` : ''}
                 </Text>
                 {item.tutor && (
