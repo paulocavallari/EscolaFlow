@@ -23,10 +23,7 @@ interface ImportResult {
     errors: Array<{ row: number; message: string }>;
 }
 
-interface RowError {
-    row: number;
-    message: string;
-}
+type RowError = ImportResult['errors'][number];
 
 function parseCSV(csvText: string): CSVRow[] {
     const lines = csvText.trim().split('\n');
