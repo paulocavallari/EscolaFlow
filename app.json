@@ -15,7 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.escolaflow.app"
+      "bundleIdentifier": "com.escolaflow.app",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "O Ocorrências VC precisa da sua permissão para converter sua fala em texto.",
+        "NSMicrophoneUsageDescription": "O Ocorrências VC precisa do microfone para ouvir a ocorrência e transcrever."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +28,10 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.escolaflow.app"
+      "package": "com.escolaflow.app",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -40,6 +47,13 @@
           "microphonePermission": "O Ocorrências VC precisa do microfone para ouvir a ocorrência e transcrever."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2ef76138-2aeb-45fe-af38-71b1cd6f007c"
+      }
+    },
+    "owner": "paulocavallari"
   }
 }
