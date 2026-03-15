@@ -10,12 +10,14 @@ import {
     StyleSheet,
     Alert,
 } from 'react-native';
+import { X, Check, CaretUp, CaretDown } from 'phosphor-react-native';
 import { useStudentsList, useTutorsList, useUpdateStudent } from '../../../src/hooks/useStudents';
 import { useClassesList } from '../../../src/hooks/useStudents';
 import { StudentWithRelations, Profile } from '../../../src/types/database';
-import { COLORS } from '../../../src/lib/constants';
+import { useTheme, typography } from '../../../src/lib/theme';
 
 export default function TutorsScreen() {
+    const { colors } = useTheme();
     const { data: classes } = useClassesList();
     const { data: tutors } = useTutorsList();
 
@@ -54,38 +56,41 @@ export default function TutorsScreen() {
         const isExpanded = expandedStudentId === item.id;
 
         return (
-            <View style={styles.studentCard}>
+            <View style={[styles.studentCard, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
                 <TouchableOpacity
                     style={styles.studentHeader}
                     onPress={() => setExpandedStudentId(isExpanded ? null : item.id)}
                 >
                     <View style={styles.studentInfo}>
-                        <Text style={styles.studentName}>{item.name}</Text>
-                        <Text style={styles.studentClass}>{item.class?.name ?? ''}</Text>
+                        <Text style={[styles.studentName, { color: colors.onSurface }]}>{item.name}</Text>
+                        <Text style={[styles.studentClass, { color: colors.onSurfaceVariant }]}>{item.class?.name ?? ''}</Text>
                     </View>
                     <View style={styles.tutorStatus}>
                         {item.tutor ? (
-                            <View style={styles.tutorBadge}>
-                                <Text style={styles.tutorName}>{item.tutor.full_name}</Text>
+                            <View style={[styles.tutorBadge, { backgroundColor: colors.successContainer }]}>
+                                <Text style={[styles.tutorName, { color: colors.onSuccessContainer }]}>{item.tutor.full_name}</Text>
                             </View>
                         ) : (
-                            <View style={styles.noTutorBadge}>
-                                <Text style={styles.noTutorText}>Sem tutor</Text>
+                            <View style={[styles.noTutorBadge, { backgroundColor: colors.warningContainer }]}>
+                                <Text style={[styles.noTutorText, { color: colors.onWarningContainer }]}>Sem tutor</Text>
                             </View>
                         )}
-                        <Text style={styles.expandArrow}>{isExpanded ? '▲' : '▼'}</Text>
+                        {isExpanded
+                            ? <CaretUp size={14} color={colors.onSurfaceVariant} />
+                            : <CaretDown size={14} color={colors.onSurfaceVariant} />}
                     </View>
                 </TouchableOpacity>
 
                 {isExpanded && (
-                    <View style={styles.tutorList}>
-                        <Text style={styles.tutorListTitle}>Selecionar Tutor:</Text>
+                    <View style={[styles.tutorList, { borderTopColor: colors.outlineVariant }]}>
+                        <Text style={[styles.tutorListTitle, { color: colors.onSurfaceVariant }]}>Selecionar Tutor:</Text>
                         {item.tutor_id && (
                             <TouchableOpacity
-                                style={styles.removeTutorBtn}
+                                style={[styles.removeTutorBtn, { backgroundColor: colors.errorContainer }]}
                                 onPress={() => handleRemoveTutor(item.id)}
                             >
-                                <Text style={styles.removeTutorText}>✕ Remover tutor atual</Text>
+                                <X size={14} color={colors.onErrorContainer} weight="bold" />
+                                <Text style={[styles.removeTutorText, { color: colors.onErrorContainer }]}>Remover tutor atual</Text>
                             </TouchableOpacity>
                         )}
                         {tutors?.map((tutor) => (
@@ -93,20 +98,22 @@ export default function TutorsScreen() {
                                 key={tutor.id}
                                 style={[
                                     styles.tutorOption,
-                                    item.tutor_id === tutor.id && styles.tutorOptionActive,
+                                    { backgroundColor: colors.surfaceContainerLow },
+                                    item.tutor_id === tutor.id && { backgroundColor: colors.primaryContainer, borderWidth: 1, borderColor: colors.primary + '40' },
                                 ]}
                                 onPress={() => handleAssignTutor(item.id, item.name, tutor)}
                             >
                                 <Text
                                     style={[
                                         styles.tutorOptionText,
-                                        item.tutor_id === tutor.id && styles.tutorOptionTextActive,
+                                        { color: colors.onSurface },
+                                        item.tutor_id === tutor.id && { fontWeight: '600', color: colors.onPrimaryContainer },
                                     ]}
                                 >
                                     {tutor.full_name}
                                 </Text>
                                 {item.tutor_id === tutor.id && (
-                                    <Text style={styles.checkMark}>✓</Text>
+                                    <Check size={18} color={colors.primary} weight="bold" />
                                 )}
                             </TouchableOpacity>
                         ))}
@@ -117,24 +124,24 @@ export default function TutorsScreen() {
     };
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Class filter */}
             <View style={styles.filterRow}>
                 <TouchableOpacity
-                    style={[styles.filterChip, !selectedClassId && styles.filterChipActive]}
+                    style={[styles.filterChip, { backgroundColor: colors.surface }, !selectedClassId && { backgroundColor: colors.primary }]}
                     onPress={() => setSelectedClassId('')}
                 >
-                    <Text style={[styles.filterText, !selectedClassId && styles.filterTextActive]}>
+                    <Text style={[styles.filterText, { color: colors.onSurfaceVariant }, !selectedClassId && { color: colors.onPrimary }]}>
                         Todas
                     </Text>
                 </TouchableOpacity>
                 {classes?.map((cls) => (
                     <TouchableOpacity
                         key={cls.id}
-                        style={[styles.filterChip, selectedClassId === cls.id && styles.filterChipActive]}
+                        style={[styles.filterChip, { backgroundColor: colors.surface }, selectedClassId === cls.id && { backgroundColor: colors.primary }]}
                         onPress={() => setSelectedClassId(cls.id)}
                     >
-                        <Text style={[styles.filterText, selectedClassId === cls.id && styles.filterTextActive]}>
+                        <Text style={[styles.filterText, { color: colors.onSurfaceVariant }, selectedClassId === cls.id && { color: colors.onPrimary }]}>
                             {cls.name}
                         </Text>
                     </TouchableOpacity>
@@ -147,7 +154,7 @@ export default function TutorsScreen() {
                 renderItem={renderStudent}
                 contentContainerStyle={styles.listContent}
                 ListEmptyComponent={
-                    <Text style={styles.emptyText}>Nenhum aluno nesta turma.</Text>
+                    <Text style={[styles.emptyText, { color: colors.onSurfaceVariant }]}>Nenhum aluno nesta turma.</Text>
                 }
             />
         </View>
@@ -155,7 +162,7 @@ export default function TutorsScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    container: { flex: 1 },
     filterRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -166,18 +173,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14,
         paddingVertical: 8,
         borderRadius: 20,
-        backgroundColor: COLORS.surface,
     },
-    filterChipActive: { backgroundColor: COLORS.primary },
-    filterText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
-    filterTextActive: { color: COLORS.white },
+    filterText: { ...typography.labelMedium, fontWeight: '600' },
     listContent: { padding: 16, paddingTop: 0, paddingBottom: 40 },
     studentCard: {
-        backgroundColor: COLORS.surface,
         borderRadius: 14,
         marginBottom: 8,
         borderWidth: 1,
-        borderColor: COLORS.border + '20',
         overflow: 'hidden',
     },
     studentHeader: {
@@ -187,34 +189,29 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     studentInfo: { flex: 1 },
-    studentName: { fontSize: 15, fontWeight: '600', color: COLORS.textPrimary },
-    studentClass: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+    studentName: { ...typography.bodyLarge, fontWeight: '600' },
+    studentClass: { ...typography.bodySmall, marginTop: 2 },
     tutorStatus: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     tutorBadge: {
-        backgroundColor: COLORS.success + '20',
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 8,
     },
-    tutorName: { fontSize: 12, fontWeight: '600', color: COLORS.success },
+    tutorName: { ...typography.labelSmall, fontWeight: '600' },
     noTutorBadge: {
-        backgroundColor: COLORS.warning + '20',
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 8,
     },
-    noTutorText: { fontSize: 12, fontWeight: '600', color: COLORS.warning },
-    expandArrow: { fontSize: 10, color: COLORS.textMuted },
+    noTutorText: { ...typography.labelSmall, fontWeight: '600' },
     tutorList: {
         padding: 14,
         paddingTop: 0,
         borderTopWidth: 1,
-        borderTopColor: COLORS.border + '20',
     },
     tutorListTitle: {
-        fontSize: 13,
+        ...typography.labelMedium,
         fontWeight: '600',
-        color: COLORS.textSecondary,
         marginBottom: 8,
         marginTop: 10,
     },
@@ -222,33 +219,26 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         paddingHorizontal: 12,
         borderRadius: 8,
-        backgroundColor: COLORS.error + '10',
         marginBottom: 8,
         alignSelf: 'flex-start',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
     },
-    removeTutorText: { fontSize: 12, color: COLORS.error, fontWeight: '500' },
+    removeTutorText: { ...typography.bodySmall, fontWeight: '500' },
     tutorOption: {
         paddingVertical: 10,
         paddingHorizontal: 14,
         borderRadius: 10,
-        backgroundColor: COLORS.surfaceLight + '50',
         marginBottom: 6,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
     },
-    tutorOptionActive: {
-        backgroundColor: COLORS.primary + '15',
-        borderWidth: 1,
-        borderColor: COLORS.primary + '40',
-    },
-    tutorOptionText: { fontSize: 14, color: COLORS.textPrimary },
-    tutorOptionTextActive: { fontWeight: '600', color: COLORS.primary },
-    checkMark: { fontSize: 16, color: COLORS.primary, fontWeight: '700' },
+    tutorOptionText: { ...typography.bodyMedium },
     emptyText: {
         textAlign: 'center',
-        color: COLORS.textSecondary,
         marginTop: 40,
-        fontSize: 15,
+        ...typography.bodyMedium,
     },
 });

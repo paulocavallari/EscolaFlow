@@ -13,7 +13,8 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
-import { COLORS } from '../lib/constants';
+import { X, Microphone, Sparkle, ArrowCounterClockwise, CheckCircle } from 'phosphor-react-native';
+import { useTheme } from '../lib/theme';
 
 interface AIReviewModalProps {
     visible: boolean;
@@ -32,6 +33,7 @@ export function AIReviewModal({
     onReRecord,
     onClose,
 }: AIReviewModalProps) {
+    const { colors } = useTheme();
     const [editedText, setEditedText] = useState(formalText);
 
     // Reset edited text when formalText changes
@@ -47,15 +49,15 @@ export function AIReviewModal({
             onRequestClose={onClose}
         >
             <KeyboardAvoidingView
-                style={styles.container}
+                style={[styles.container, { backgroundColor: colors.background }]}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             >
                 {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                        <Text style={styles.closeText}>✕</Text>
+                <View style={[styles.header, { borderBottomColor: colors.outline }]}>
+                    <TouchableOpacity onPress={onClose} style={[styles.closeButton, { backgroundColor: colors.surfaceVariant }]}>
+                        <X size={16} color={colors.onSurfaceVariant} weight="bold" />
                     </TouchableOpacity>
-                    <Text style={styles.title}>Revisão da Ocorrência</Text>
+                    <Text style={[styles.title, { color: colors.onSurface }]}>Revisão da Ocorrência</Text>
                     <View style={styles.headerSpacer} />
                 </View>
 
@@ -67,55 +69,62 @@ export function AIReviewModal({
                     {/* Original Transcription */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionIcon}>🎙️</Text>
-                            <Text style={styles.sectionTitle}>Transcrição Original</Text>
+                            <Microphone size={18} color={colors.onSurface} weight="bold" />
+                            <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Transcrição Original</Text>
                         </View>
-                        <View style={styles.originalBox}>
-                            <Text style={styles.originalText}>{originalText}</Text>
+                        <View style={[styles.originalBox, { backgroundColor: colors.surface, borderColor: colors.outline }]}>
+                            <Text style={[styles.originalText, { color: colors.onSurfaceVariant }]}>{originalText}</Text>
                         </View>
                     </View>
 
                     {/* AI Formal Rewrite */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionIcon}>✨</Text>
-                            <Text style={styles.sectionTitle}>Versão Formal (editável)</Text>
+                            <Sparkle size={18} color={colors.onSurface} weight="fill" />
+                            <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Versão Formal (editável)</Text>
                         </View>
-                        <View style={styles.aiLabel}>
-                            <Text style={styles.aiLabelText}>Reescrito por IA</Text>
+                        <View style={[styles.aiLabel, { backgroundColor: colors.primary + '20' }]}>
+                            <Text style={[styles.aiLabelText, { color: colors.primary }]}>Reescrito por IA</Text>
                         </View>
                         <TextInput
-                            style={styles.textInput}
+                            style={[styles.textInput, { backgroundColor: colors.surface, borderColor: colors.primary + '60', color: colors.onSurface }]}
                             value={editedText}
                             onChangeText={setEditedText}
                             multiline
                             textAlignVertical="top"
                             placeholder="Texto formal da ocorrência..."
-                            placeholderTextColor={COLORS.textMuted}
+                            placeholderTextColor={colors.onSurfaceVariant}
                         />
                     </View>
                 </ScrollView>
 
                 {/* Action Buttons */}
-                <View style={styles.actions}>
+                <View style={[styles.actions, { borderTopColor: colors.outline }]}>
                     <TouchableOpacity
-                        style={styles.reRecordButton}
+                        style={[styles.reRecordButton, { backgroundColor: colors.surfaceVariant }]}
                         onPress={onReRecord}
                         activeOpacity={0.7}
                     >
-                        <Text style={styles.reRecordText}>🔄 Regravar</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <ArrowCounterClockwise size={16} color={colors.onSurface} />
+                            <Text style={[styles.reRecordText, { color: colors.onSurface }]}>Regravar</Text>
+                        </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                         style={[
                             styles.confirmButton,
+                            { backgroundColor: colors.primary },
                             !editedText.trim() && styles.confirmButtonDisabled,
                         ]}
                         onPress={() => onConfirm(editedText)}
                         disabled={!editedText.trim()}
                         activeOpacity={0.7}
                     >
-                        <Text style={styles.confirmText}>✅ Confirmar</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <CheckCircle size={16} color={colors.onPrimary} weight="bold" />
+                            <Text style={[styles.confirmText, { color: colors.onPrimary }]}>Confirmar</Text>
+                        </View>
                     </TouchableOpacity>
                 </View>
             </KeyboardAvoidingView>
@@ -126,7 +135,6 @@ export function AIReviewModal({
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background,
     },
     header: {
         flexDirection: 'row',
@@ -136,24 +144,17 @@ const styles = StyleSheet.create({
         paddingTop: 16,
         paddingBottom: 12,
         borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
     },
     closeButton: {
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: COLORS.surfaceLight,
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    closeText: {
-        fontSize: 16,
-        color: COLORS.textSecondary,
     },
     title: {
         fontSize: 18,
         fontWeight: '700',
-        color: COLORS.textPrimary,
     },
     headerSpacer: {
         width: 36,
@@ -171,31 +172,23 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         marginBottom: 8,
-    },
-    sectionIcon: {
-        fontSize: 18,
-        marginRight: 8,
+        gap: 8,
     },
     sectionTitle: {
         fontSize: 15,
         fontWeight: '600',
-        color: COLORS.textPrimary,
     },
     originalBox: {
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         padding: 16,
         borderWidth: 1,
-        borderColor: COLORS.border,
     },
     originalText: {
         fontSize: 14,
-        color: COLORS.textSecondary,
         lineHeight: 22,
         fontStyle: 'italic',
     },
     aiLabel: {
-        backgroundColor: COLORS.primaryLight + '30',
         alignSelf: 'flex-start',
         paddingHorizontal: 10,
         paddingVertical: 4,
@@ -205,43 +198,35 @@ const styles = StyleSheet.create({
     aiLabelText: {
         fontSize: 11,
         fontWeight: '600',
-        color: COLORS.primary,
     },
     textInput: {
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         padding: 16,
         fontSize: 15,
-        color: COLORS.textPrimary,
         lineHeight: 24,
         minHeight: 160,
         borderWidth: 1,
-        borderColor: COLORS.primary + '60',
     },
     actions: {
         flexDirection: 'row',
         padding: 16,
         gap: 12,
         borderTopWidth: 1,
-        borderTopColor: COLORS.border,
     },
     reRecordButton: {
         flex: 1,
         paddingVertical: 14,
         borderRadius: 12,
-        backgroundColor: COLORS.surfaceLight,
         alignItems: 'center',
     },
     reRecordText: {
         fontSize: 15,
         fontWeight: '600',
-        color: COLORS.textPrimary,
     },
     confirmButton: {
         flex: 1,
         paddingVertical: 14,
         borderRadius: 12,
-        backgroundColor: COLORS.primary,
         alignItems: 'center',
     },
     confirmButtonDisabled: {
@@ -250,7 +235,6 @@ const styles = StyleSheet.create({
     confirmText: {
         fontSize: 15,
         fontWeight: '600',
-        color: COLORS.white,
     },
 });
 

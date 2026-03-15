@@ -3,9 +3,11 @@
 
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { ClipboardText } from 'phosphor-react-native';
 import { OccurrenceWithRelations } from '../types/database';
 import { StatusBadge } from './StatusBadge';
-import { COLORS } from '../lib/constants';
+import { CATEGORY_LABELS } from '../lib/constants';
+import { useTheme } from '../lib/theme';
 
 interface OccurrenceCardProps {
     occurrence: OccurrenceWithRelations;
@@ -13,6 +15,7 @@ interface OccurrenceCardProps {
 }
 
 export function OccurrenceCard({ occurrence, onPress }: OccurrenceCardProps) {
+    const { colors } = useTheme();
     const createdDate = new Date(occurrence.created_at);
     const formattedDate = createdDate.toLocaleDateString('pt-BR', {
         day: '2-digit',
@@ -29,43 +32,47 @@ export function OccurrenceCard({ occurrence, onPress }: OccurrenceCardProps) {
 
     return (
         <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.outline + '40' }]}
             onPress={onPress}
             activeOpacity={0.7}
         >
             {/* Header Row */}
             <View style={styles.header}>
                 <View style={styles.studentInfo}>
-                    <Text style={styles.studentName}>{occurrence.student?.name ?? 'Aluno'}</Text>
-                    <Text style={styles.className}>
+                    <Text style={[styles.studentName, { color: colors.onSurface }]}>{occurrence.student?.name ?? 'Aluno'}</Text>
+                    <Text style={[styles.className, { color: colors.onSurfaceVariant }]}>
                         {occurrence.student?.class?.name ?? ''}
+                        {occurrence.category ? ` · ${CATEGORY_LABELS[occurrence.category as keyof typeof CATEGORY_LABELS] ?? occurrence.category}` : ''}
                     </Text>
                 </View>
                 <StatusBadge status={occurrence.status} size="sm" />
             </View>
 
             {/* Description Excerpt */}
-            <Text style={styles.excerpt} numberOfLines={3}>
+            <Text style={[styles.excerpt, { color: colors.onSurfaceVariant }]} numberOfLines={3}>
                 {excerpt}
             </Text>
 
             {/* Footer */}
             <View style={styles.footer}>
                 <View style={styles.footerLeft}>
-                    <Text style={styles.authorLabel}>Por: </Text>
-                    <Text style={styles.authorName}>
+                    <Text style={[styles.authorLabel, { color: colors.onSurfaceVariant }]}>Por: </Text>
+                    <Text style={[styles.authorName, { color: colors.onSurfaceVariant }]}>
                         {occurrence.author?.full_name ?? 'Professor'}
                     </Text>
                 </View>
-                <Text style={styles.date}>{formattedDate}</Text>
+                <Text style={[styles.date, { color: colors.onSurfaceVariant }]}>{formattedDate}</Text>
             </View>
 
             {/* Actions count indicator */}
             {occurrence.actions && occurrence.actions.length > 0 && (
-                <View style={styles.actionsIndicator}>
-                    <Text style={styles.actionsText}>
-                        📋 {occurrence.actions.length} tratativa(s)
-                    </Text>
+                <View style={[styles.actionsIndicator, { borderTopColor: colors.outline + '30' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <ClipboardText size={14} color={colors.primary} />
+                        <Text style={[styles.actionsText, { color: colors.primary }]}>
+                            {occurrence.actions.length} tratativa(s)
+                        </Text>
+                    </View>
                 </View>
             )}
         </TouchableOpacity>
@@ -74,12 +81,10 @@ export function OccurrenceCard({ occurrence, onPress }: OccurrenceCardProps) {
 
 const styles = StyleSheet.create({
     card: {
-        backgroundColor: COLORS.surface,
         borderRadius: 16,
         padding: 16,
         marginBottom: 12,
         borderWidth: 1,
-        borderColor: COLORS.border + '40',
     },
     header: {
         flexDirection: 'row',
@@ -94,16 +99,13 @@ const styles = StyleSheet.create({
     studentName: {
         fontSize: 16,
         fontWeight: '700',
-        color: COLORS.textPrimary,
     },
     className: {
         fontSize: 13,
-        color: COLORS.textSecondary,
         marginTop: 2,
     },
     excerpt: {
         fontSize: 14,
-        color: COLORS.textSecondary,
         lineHeight: 20,
         marginBottom: 12,
     },
@@ -118,26 +120,21 @@ const styles = StyleSheet.create({
     },
     authorLabel: {
         fontSize: 12,
-        color: COLORS.textMuted,
     },
     authorName: {
         fontSize: 12,
-        color: COLORS.textSecondary,
         fontWeight: '500',
     },
     date: {
         fontSize: 12,
-        color: COLORS.textMuted,
     },
     actionsIndicator: {
         marginTop: 8,
         paddingTop: 8,
         borderTopWidth: 1,
-        borderTopColor: COLORS.border + '30',
     },
     actionsText: {
         fontSize: 12,
-        color: COLORS.primary,
         fontWeight: '500',
     },
 });

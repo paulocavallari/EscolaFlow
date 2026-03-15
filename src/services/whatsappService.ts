@@ -3,9 +3,8 @@
 
 import { supabase, supabaseUrl, supabaseAnonKey } from '../lib/supabase';
 
-// Helper instance info
-const API_URL = process.env.EXPO_PUBLIC_EVOLUTION_API_URL ?? 'http://137.131.213.8:8080';
-const API_KEY = process.env.EXPO_PUBLIC_EVOLUTION_API_KEY ?? 'Pa7412365**';
+const API_URL = process.env.EXPO_PUBLIC_EVOLUTION_API_URL;
+const API_KEY = process.env.EXPO_PUBLIC_EVOLUTION_API_KEY;
 
 interface SendMessageResponse {
     key: {
@@ -69,6 +68,9 @@ export async function sendWhatsAppMessage(phone: string, text: string): Promise<
 
 export async function fetchInstances(): Promise<any> {
     try {
+        if (!API_URL || !API_KEY) {
+            throw new Error('Evolution API não configurada no cliente. Use o proxy via Edge Function.');
+        }
         const url = `${API_URL}/instance/fetchInstances`;
         console.log('Fetching instances from:', url);
 

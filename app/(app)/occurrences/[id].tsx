@@ -14,7 +14,26 @@ import {
     TextInput,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useOccurrenceDetail, useAddAction, useUpdateAction, useProcessText, useDeleteOccurrence } from '../../../src/hooks/useOccurrences';
+import {
+    NotePencil,
+    Microphone,
+    Notebook,
+    Trash,
+    MapPin,
+    Tag,
+    FilePdf,
+    WhatsappLogo,
+    CheckCircle,
+    ArrowUp,
+    PencilSimple,
+    Sparkle,
+    Buildings,
+    BookOpen,
+    WarningCircle,
+    ArrowLeft,
+} from 'phosphor-react-native';
+import { useOccurrenceDetail, useAddAction, useUpdateAction, useDeleteOccurrence } from '../../../src/hooks/useOccurrences';
+import { AIProcessingIndicator } from '../../../src/components/AIProcessingIndicator';
 import { generateOccurrencePDF } from '../../../src/utils/pdfGenerator';
 import { useProfile } from '../../../src/hooks/useProfile';
 import { StatusBadge } from '../../../src/components/StatusBadge';
@@ -25,17 +44,27 @@ import {
     OccurrenceStatus,
     ActionType,
     UserRole,
+    OccurrenceCategory,
+    OccurrenceFinalCategory,
 } from '../../../src/types/database';
-import { COLORS, ACTION_TYPE_LABELS } from '../../../src/lib/constants';
+import { ACTION_TYPE_LABELS, LOCATION_LABELS, CATEGORY_LABELS, FINAL_CATEGORY_LABELS } from '../../../src/lib/constants';
 import { sendWhatsAppMessage } from '../../../src/services/whatsappService';
+import { showAlert, showConfirmDialog, showDoubleConfirmDialog } from '../../../src/utils/confirmDialogs';
+import {
+    buildGuardianNotificationMessage,
+    buildVPEscalationNotificationMessage,
+} from '../../../src/services/messageBuilders';
+import { useAITextProcessing } from '../../../src/hooks/useAITextProcessing';
+import { useTheme, typography } from '../../../src/lib/theme';
 
 export default function OccurrenceDetailScreen() {
+    const { colors } = useTheme();
     const { id } = useLocalSearchParams<{ id: string }>();
     const { profileId, role } = useProfile();
 
     const { data: occurrence, isLoading } = useOccurrenceDetail(id ?? '');
     const addAction = useAddAction();
-    const processText = useProcessText();
+    const aiText = useAITextProcessing();
 
     // Treatment state
     const [showTreatment, setShowTreatment] = useState(false);
@@ -47,6 +76,8 @@ export default function OccurrenceDetailScreen() {
     const [editingActionId, setEditingActionId] = useState<string | null>(null);
     const [editContent, setEditContent] = useState('');
     const deleteOccurrence = useDeleteOccurrence();
+    const [selectedFinalCategory, setSelectedFinalCategory] = useState<OccurrenceFinalCategory | null>(null);
+    const [showFinalCategoryPicker, setShowFinalCategoryPicker] = useState(false);
 
     const canTreat = Boolean(
         occurrence &&
@@ -62,18 +93,51 @@ export default function OccurrenceDetailScreen() {
     const isVP = role === UserRole.VICE_DIRECTOR;
     const isAdmin = role === UserRole.ADMIN;
 
+    // Shared handler when AI is unavailable — lets user pick between saving as-is or retrying later
+    const handleAIUnavailable = useCallback(
+        (original: string, onProceed: () => void) => {
+            if (Platform.OS === 'web') {
+                const proceed = window.confirm(
+                    'Não foi possível reescrever o texto com IA no momento.\n\nClique OK para salvar usando o texto original, ou Cancelar para tentar novamente mais tarde.'
+                );
+                if (proceed) onProceed();
+            } else {
+                Alert.alert(
+                    'IA indisponível',
+                    'Não foi possível reescrever o texto com IA no momento. O que deseja fazer?',
+                    [
+                        { text: 'Salvar com texto original', onPress: onProceed },
+                        { text: 'Tentar mais tarde', style: 'cancel' },
+                    ]
+                );
+            }
+        },
+        []
+    );
+
     // Handle recorded audio for treatment
     const handleTranscriptionComplete = useCallback(async (text: string) => {
         if (!text.trim()) return;
-        try {
-            const result = await processText.mutateAsync(text);
-            setTreatmentOriginal(result.original);
-            setTreatmentFormal(result.formal);
-            setShowReviewModal(true);
-        } catch (err) {
-            Alert.alert('Erro', 'Falha ao processar texto.');
-        }
-    }, [processText]);
+        await aiText.processTextWithAI(
+            text,
+            (result) => {
+                if (result.aiUnavailable) {
+                    handleAIUnavailable(result.original, () => {
+                        setTreatmentOriginal(result.original);
+                        setTreatmentFormal(result.original);
+                        setShowReviewModal(true);
+                    });
+                    return;
+                }
+                setTreatmentOriginal(result.original);
+                setTreatmentFormal(result.formal);
+                setShowReviewModal(true);
+            },
+            (err) => {
+                Alert.alert('Erro no processamento', err.message);
+            }
+        );
+    }, [aiText, handleAIUnavailable]);
 
     const handleDelete = useCallback(async () => {
         if (!occurrence) return;
@@ -97,42 +161,12 @@ export default function OccurrenceDetailScreen() {
             }
         };
 
-        if (Platform.OS === 'web') {
-            // Double verification on web
-            const first = window.confirm(
-                '🗑️ Deseja realmente excluir esta ocorrência de forma permanente?\n\nEsta ação NÃO pode ser desfeita.'
-            );
-            if (!first) return;
-
-            const second = window.confirm(
-                '⚠️ CONFIRMAÇÃO FINAL\n\nTem CERTEZA ABSOLUTA? Todos os dados desta ocorrência serão perdidos permanentemente.'
-            );
-            if (!second) return;
-
-            await performDelete();
-        } else {
-            Alert.alert(
-                '🗑️ Confirmar Exclusão',
-                'Deseja realmente excluir esta ocorrência de forma permanente? Esta ação não pode ser desfeita.',
-                [
-                    { text: 'Cancelar', style: 'cancel' },
-                    {
-                        text: 'Excluir',
-                        style: 'destructive',
-                        onPress: () => {
-                            Alert.alert(
-                                '⚠️ Confirmação Final',
-                                'Tem CERTEZA ABSOLUTA? Todos os dados serão perdidos permanentemente.',
-                                [
-                                    { text: 'Cancelar', style: 'cancel' },
-                                    { text: 'Sim, Excluir', style: 'destructive', onPress: performDelete },
-                                ]
-                            );
-                        }
-                    }
-                ]
-            );
-        }
+        showDoubleConfirmDialog(
+            '🗑️ Confirmar Exclusão',
+            'Deseja realmente excluir esta ocorrência de forma permanente? Esta ação não pode ser desfeita.',
+            '⚠️ CONFIRMAÇÃO FINAL\n\nTem CERTEZA ABSOLUTA? Todos os dados desta ocorrência serão perdidos permanentemente.',
+            performDelete
+        );
     }, [occurrence, deleteOccurrence]);
 
     const handleExportPDF = async () => {
@@ -148,11 +182,7 @@ export default function OccurrenceDetailScreen() {
         if (!occurrence) return;
         const guardianPhone = occurrence.student?.guardian_phone;
         if (!guardianPhone) {
-            if (Platform.OS === 'web') {
-                window.alert('Este aluno não possui telefone do responsável cadastrado. Adicione-o na tela de Alunos do painel administrativo.');
-            } else {
-                Alert.alert('Sem número cadastrado', 'Este aluno não possui telefone do responsável cadastrado. Adicione-o na tela de Alunos do painel administrativo.');
-            }
+            showAlert('Sem número cadastrado', 'Este aluno não possui telefone do responsável cadastrado. Adicione-o na tela de Alunos do painel administrativo.');
             return;
         }
         // Build a complete message with occurrence description + final parecer
@@ -164,15 +194,13 @@ export default function OccurrenceDetailScreen() {
             ? lastAction.description
             : 'Parecer não registrado.';
 
-        const message =
-            `*Comunicado Escolar — Ocorrências VC*\n\n` +
-            `Prezado(a) responsável pelo(a) aluno(a) *${occurrence.student?.name ?? 'N/A'}* da turma *${occurrence.student?.class?.name ?? 'N/A'}*,\n\n` +
-            `Informamos que foi registrada uma ocorrência referente ao(à) aluno(a), conforme detalhado abaixo.\n\n` +
-            `📝 *Ocorrência registrada por ${occurrence.author?.full_name ?? 'Professor(a)'}:*\n` +
-            `${occurrenceDescription}\n\n` +
-            `✅ *Parecer final:*\n` +
-            `${parecerText}\n\n` +
-            `Qualquer dúvida, entre em contato com a escola.`;
+        const message = buildGuardianNotificationMessage(
+            occurrence.student?.name ?? 'N/A',
+            occurrence.student?.class?.name ?? 'N/A',
+            occurrence.author?.full_name ?? 'Professor(a)',
+            occurrenceDescription,
+            parecerText,
+        );
 
         const doSend = async () => {
             try {
@@ -199,23 +227,12 @@ export default function OccurrenceDetailScreen() {
             }
         };
 
-        if (Platform.OS === 'web') {
-            const confirmed = window.confirm(
-                `📱 Enviar notificação WhatsApp ao responsável do(a) ${occurrence.student?.name ?? 'aluno'}?\n\nNúmero: ${guardianPhone}`
-            );
-            if (confirmed) {
-                await doSend();
-            }
-        } else {
-            Alert.alert(
-                '📱 Enviar notificação WhatsApp',
-                `Enviar mensagem ao responsável do(a) ${occurrence.student?.name ?? 'aluno'}?\n\nNúmero: ${guardianPhone}`,
-                [
-                    { text: 'Cancelar', style: 'cancel' },
-                    { text: 'Enviar', onPress: doSend },
-                ]
-            );
-        }
+        showConfirmDialog(
+            '📱 Enviar notificação WhatsApp',
+            `Enviar mensagem ao responsável do(a) ${occurrence.student?.name ?? 'aluno'}?\n\nNúmero: ${guardianPhone}`,
+            'Enviar',
+            doSend
+        );
     }, [occurrence]);
 
     // Handle text treatment: process with AI
@@ -224,14 +241,25 @@ export default function OccurrenceDetailScreen() {
             Alert.alert('Aviso', 'Digite os detalhes da providência antes de continuar.');
             return;
         }
-        try {
-            const result = await processText.mutateAsync(manualTreatmentText);
-            setTreatmentOriginal(result.original);
-            setTreatmentFormal(result.formal);
-            setShowReviewModal(true);
-        } catch (err) {
-            Alert.alert('Erro', 'Falha ao processar texto.');
-        }
+        await aiText.processTextWithAI(
+            manualTreatmentText,
+            (result) => {
+                if (result.aiUnavailable) {
+                    handleAIUnavailable(result.original, () => {
+                        setTreatmentOriginal(result.original);
+                        setTreatmentFormal(result.original);
+                        setShowReviewModal(true);
+                    });
+                    return;
+                }
+                setTreatmentOriginal(result.original);
+                setTreatmentFormal(result.formal);
+                setShowReviewModal(true);
+            },
+            (err) => {
+                Alert.alert('Erro no processamento', err.message);
+            }
+        );
     };
 
     // After AI review, populate manual field with reviewed text
@@ -265,12 +293,27 @@ export default function OccurrenceDetailScreen() {
         }
 
         try {
+            // Block conclude if category is OUTRO and no final_category selected
+            if (
+                newStatus === OccurrenceStatus.CONCLUDED &&
+                occurrence.category === OccurrenceCategory.OUTRO &&
+                !selectedFinalCategory
+            ) {
+                Alert.alert(
+                    'Categoria Final Obrigatória',
+                    'Como a categoria desta ocorrência é "Outro", é necessário selecionar uma Categoria Final antes de concluir.'
+                );
+                setShowFinalCategoryPicker(true);
+                return;
+            }
+
             await addAction.mutateAsync({
                 occurrence_id: occurrence.id,
                 author_id: profileId,
                 description: manualTreatmentText.trim(),
                 action_type: actionType,
                 newStatus,
+                ...(selectedFinalCategory ? { final_category: selectedFinalCategory } : {}),
             });
 
             // Auto-notify all VP users when occurrence is escalated
@@ -283,12 +326,12 @@ export default function OccurrenceDetailScreen() {
                     .then(({ data: vpProfiles }) => {
                         if (!vpProfiles || vpProfiles.length === 0) return;
                         const message =
-                            `*Ocorrência Encaminhada à Vice-Direção*\n\n` +
-                            `Aluno: ${occurrence.student?.name ?? 'N/A'}\n` +
-                            `Turma: ${occurrence.student?.class?.name ?? 'N/A'}\n` +
-                            `Registrada por: ${occurrence.author?.full_name ?? 'N/A'}\n\n` +
-                            `Observação do tutor: ${manualTreatmentText.trim()}\n\n` +
-                            `Acesse o app Ocorrências VC para analisar e registrar a devolutiva.`;
+                            buildVPEscalationNotificationMessage(
+                                occurrence.student?.name ?? 'N/A',
+                                occurrence.student?.class?.name ?? 'N/A',
+                                occurrence.author?.full_name ?? 'N/A',
+                                manualTreatmentText.trim()
+                            );
                         vpProfiles.forEach((vp: any) => {
                             if (vp.whatsapp_number) {
                                 sendWhatsAppMessage(vp.whatsapp_number, message)
@@ -304,7 +347,7 @@ export default function OccurrenceDetailScreen() {
         } catch (err) {
             Alert.alert('Erro', 'Falha ao registrar a tratativa.');
         }
-    }, [occurrence, profileId, manualTreatmentText, addAction]);
+    }, [occurrence, profileId, manualTreatmentText, addAction, selectedFinalCategory]);
 
     const handleSaveEdit = async () => {
         if (!editingActionId || !editContent.trim()) return;
@@ -320,20 +363,25 @@ export default function OccurrenceDetailScreen() {
 
     if (isLoading) {
         return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-                <Text style={styles.loadingText}>Carregando ocorrência...</Text>
+            <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={[styles.loadingText, { color: colors.onSurfaceVariant }]}>Carregando ocorrência...</Text>
             </View>
         );
     }
 
     if (!occurrence) {
         return (
-            <View style={styles.loadingContainer}>
-                <Text style={styles.errorIcon}>😔</Text>
-                <Text style={styles.errorText}>Ocorrência não encontrada.</Text>
+            <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+                <View style={[styles.errorIconCircle, { backgroundColor: colors.surfaceVariant }]}>
+                    <WarningCircle size={40} color={colors.onSurfaceVariant} weight="duotone" />
+                </View>
+                <Text style={[styles.errorText, { color: colors.onSurfaceVariant }]}>Ocorrência não encontrada.</Text>
                 <TouchableOpacity style={styles.backLinkButton} onPress={() => router.back()}>
-                    <Text style={styles.backLinkText}>← Voltar à lista</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <ArrowLeft size={16} color={colors.primary} />
+                        <Text style={[styles.backLinkText, { color: colors.primary }]}>Voltar à lista</Text>
+                    </View>
                 </TouchableOpacity>
             </View>
         );
@@ -359,46 +407,87 @@ export default function OccurrenceDetailScreen() {
     };
 
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
             {/* Header Info */}
-            <View style={styles.headerCard}>
+            <View style={[styles.headerCard, { backgroundColor: colors.surface, borderColor: colors.outline + '30' }]}>
                 <View style={styles.headerTop}>
                     <StatusBadge status={occurrence.status} />
-                    <Text style={styles.date}>{createdDate}</Text>
+                    <Text style={[styles.date, { color: colors.onSurfaceVariant }]}>{createdDate}</Text>
                 </View>
 
-                <Text style={styles.studentName}>
+                <Text style={[styles.studentName, { color: colors.onSurface }]}>
                     {occurrence.student?.name ?? 'Aluno'}
                 </Text>
-                <Text style={styles.className}>
+                <Text style={[styles.className, { color: colors.onSurfaceVariant }]}>
                     {occurrence.student?.class?.name ?? ''}
                 </Text>
 
                 <View style={styles.metaRow}>
                     <View style={styles.metaItem}>
-                        <Text style={styles.metaLabel}>Registrado por</Text>
-                        <Text style={styles.metaValue}>{occurrence.author?.full_name ?? '-'}</Text>
+                        <Text style={[styles.metaLabel, { color: colors.onSurfaceVariant }]}>Registrado por</Text>
+                        <Text style={[styles.metaValue, { color: colors.onSurface }]}>{occurrence.author?.full_name ?? '-'}</Text>
                     </View>
                     <View style={styles.metaItem}>
-                        <Text style={styles.metaLabel}>Tutor(a)</Text>
-                        <Text style={styles.metaValue}>{occurrence.tutor?.full_name ?? '-'}</Text>
+                        <Text style={[styles.metaLabel, { color: colors.onSurfaceVariant }]}>Tutor(a)</Text>
+                        <Text style={[styles.metaValue, { color: colors.onSurface }]}>{occurrence.tutor?.full_name ?? '-'}</Text>
                     </View>
                 </View>
+
+                {/* Location, Category & Final Category */}
+                <View style={[styles.metaRow, { marginTop: 12 }]}>
+                    {occurrence.location && (
+                        <View style={styles.metaItem}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                <MapPin size={12} color={colors.onSurfaceVariant} />
+                                <Text style={[styles.metaLabel, { color: colors.onSurfaceVariant }]}>Local</Text>
+                            </View>
+                            <Text style={[styles.metaValue, { color: colors.onSurface }]}>{LOCATION_LABELS[occurrence.location as keyof typeof LOCATION_LABELS] ?? occurrence.location}</Text>
+                        </View>
+                    )}
+                    {occurrence.category && (
+                        <View style={styles.metaItem}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                <Tag size={12} color={colors.onSurfaceVariant} />
+                                <Text style={[styles.metaLabel, { color: colors.onSurfaceVariant }]}>Categoria</Text>
+                            </View>
+                            <Text style={[styles.metaValue, { color: colors.onSurface }]}>{CATEGORY_LABELS[occurrence.category as keyof typeof CATEGORY_LABELS] ?? occurrence.category}</Text>
+                        </View>
+                    )}
+                </View>
+                {occurrence.final_category && (
+                    <View style={[styles.metaRow, { marginTop: 8 }]}>
+                        <View style={styles.metaItem}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                <Tag size={12} color={colors.onSurfaceVariant} />
+                                <Text style={[styles.metaLabel, { color: colors.onSurfaceVariant }]}>Categoria Final</Text>
+                            </View>
+                            <Text style={[styles.metaValue, { color: colors.primary }]}>
+                                {FINAL_CATEGORY_LABELS[occurrence.final_category as keyof typeof FINAL_CATEGORY_LABELS] ?? occurrence.final_category}
+                            </Text>
+                        </View>
+                    </View>
+                )}
             </View>
 
             {/* Formal Description */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>📝 Descrição Formal</Text>
-                <View style={styles.descriptionBox}>
-                    <Text style={styles.descriptionText}>{occurrence.description_formal}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <NotePencil size={18} color={colors.onSurface} weight="bold" />
+                    <Text style={[styles.sectionTitle, { color: colors.onSurface, marginBottom: 0 }]}>Descrição Formal</Text>
+                </View>
+                <View style={[styles.descriptionBox, { backgroundColor: colors.surface, borderColor: colors.outline + '30' }]}>
+                    <Text style={[styles.descriptionText, { color: colors.onSurface }]}>{occurrence.description_formal}</Text>
                 </View>
             </View>
 
             {/* Original Transcription */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>🎙️ Relato Original</Text>
-                <View style={[styles.descriptionBox, styles.originalBox]}>
-                    <Text style={[styles.descriptionText, styles.originalText]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <Microphone size={18} color={colors.onSurface} weight="bold" />
+                    <Text style={[styles.sectionTitle, { color: colors.onSurface, marginBottom: 0 }]}>Relato Original</Text>
+                </View>
+                <View style={[styles.descriptionBox, styles.originalBox, { backgroundColor: colors.surfaceVariant + '50', borderColor: colors.outline + '20' }]}>
+                    <Text style={[styles.descriptionText, styles.originalText, { color: colors.onSurfaceVariant }]}>
                         {occurrence.description_original}
                     </Text>
                 </View>
@@ -407,24 +496,27 @@ export default function OccurrenceDetailScreen() {
             {/* Action Timeline */}
             {occurrence.actions && occurrence.actions.length > 0 && (
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>📓 Histórico de Tratativas</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <Notebook size={18} color={colors.onSurface} weight="bold" />
+                        <Text style={[styles.sectionTitle, { color: colors.onSurface, marginBottom: 0 }]}>Histórico de Tratativas</Text>
+                    </View>
                     {occurrence.actions.map((action, idx) => {
                         const isEditing = editingActionId === action.id;
                         const canEditAction = Boolean(profileId && (action.author_id === profileId || isAdmin));
 
                         return (
                             <View key={action.id} style={styles.timelineItem}>
-                                <View style={styles.timelineDot} />
+                                <View style={[styles.timelineDot, { backgroundColor: colors.primary }]} />
                                 {idx < occurrence.actions.length - 1 && (
-                                    <View style={styles.timelineLine} />
+                                    <View style={[styles.timelineLine, { backgroundColor: colors.outline + '40' }]} />
                                 )}
-                                <View style={styles.timelineContent}>
+                                <View style={[styles.timelineContent, { backgroundColor: colors.surface, borderColor: colors.outline + '20' }]}>
                                     <View style={styles.timelineHeader}>
                                         <View>
-                                            <Text style={styles.timelineType}>
+                                            <Text style={[styles.timelineType, { color: colors.primary }]}>
                                                 {ACTION_TYPE_LABELS[action.action_type]}
                                             </Text>
-                                            <Text style={styles.timelineDate}>
+                                            <Text style={[styles.timelineDate, { color: colors.onSurfaceVariant }]}>
                                                 {new Date(action.created_at).toLocaleDateString('pt-BR', {
                                                     day: '2-digit',
                                                     month: '2-digit',
@@ -441,18 +533,21 @@ export default function OccurrenceDetailScreen() {
                                                 }}
                                                 style={styles.editActionBtn}
                                             >
-                                                <Text style={styles.editActionText}>✏️ Editar</Text>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                                    <PencilSimple size={14} color={colors.primary} />
+                                                    <Text style={[styles.editActionText, { color: colors.primary }]}>Editar</Text>
+                                                </View>
                                             </TouchableOpacity>
                                         )}
                                     </View>
-                                    <Text style={styles.timelineAuthor}>
+                                    <Text style={[styles.timelineAuthor, { color: colors.onSurfaceVariant }]}>
                                         Por: {action.author?.full_name ?? '-'}
                                     </Text>
 
                                     {isEditing ? (
                                         <View style={{ marginTop: 8 }}>
                                             <TextInput
-                                                style={styles.editInput}
+                                                style={[styles.editInput, { backgroundColor: colors.background, borderColor: colors.outline, color: colors.onSurface }]}
                                                 multiline
                                                 value={editContent}
                                                 onChangeText={setEditContent}
@@ -463,23 +558,23 @@ export default function OccurrenceDetailScreen() {
                                                     onPress={() => setEditingActionId(null)}
                                                     style={styles.editCancelBtn}
                                                 >
-                                                    <Text style={styles.editCancelText}>Cancelar</Text>
+                                                    <Text style={[styles.editCancelText, { color: colors.onSurfaceVariant }]}>Cancelar</Text>
                                                 </TouchableOpacity>
                                                 <TouchableOpacity
                                                     onPress={handleSaveEdit}
                                                     disabled={updateAction.isPending}
-                                                    style={styles.editSaveBtn}
+                                                    style={[styles.editSaveBtn, { backgroundColor: colors.primary }]}
                                                 >
                                                     {updateAction.isPending ? (
-                                                        <ActivityIndicator size="small" color="#fff" />
+                                                        <ActivityIndicator size="small" color={colors.onPrimary} />
                                                     ) : (
-                                                        <Text style={styles.editSaveText}>Salvar</Text>
+                                                        <Text style={[styles.editSaveText, { color: colors.onPrimary }]}>Salvar</Text>
                                                     )}
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
                                     ) : (
-                                        <Text style={styles.timelineDescription}>
+                                        <Text style={[styles.timelineDescription, { color: colors.onSurface }]}>
                                             {action.description}
                                         </Text>
                                     )}
@@ -492,87 +587,185 @@ export default function OccurrenceDetailScreen() {
 
             {/* Treatment Section */}
             {canTreat && !showTreatment && (
-                <View style={styles.treatmentPrompt}>
-                    <Text style={styles.treatmentPromptTitle}>
+                <View style={[styles.treatmentPrompt, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '30' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                         {occurrence.status === OccurrenceStatus.ESCALATED_VP
-                            ? '🏦 Devolutiva da Vice-Direção'
-                            : '📚 Registrar Tratativa'}
-                    </Text>
-                    <Text style={styles.treatmentHint}>{getTreatmentHint()}</Text>
+                            ? <Buildings size={20} color={colors.onSurface} weight="bold" />
+                            : <BookOpen size={20} color={colors.onSurface} weight="bold" />}
+                        <Text style={[styles.treatmentPromptTitle, { color: colors.onSurface }]}>
+                            {occurrence.status === OccurrenceStatus.ESCALATED_VP
+                                ? 'Devolutiva da Vice-Direção'
+                                : 'Registrar Tratativa'}
+                        </Text>
+                    </View>
+                    <Text style={[styles.treatmentHint, { color: colors.onSurfaceVariant }]}>{getTreatmentHint()}</Text>
                     <TouchableOpacity
-                        style={styles.treatButton}
+                        style={[styles.treatButton, { backgroundColor: colors.primary }]}
                         onPress={() => setShowTreatment(true)}
                     >
-                        <Text style={styles.treatButtonText}>📝 Registrar Providência</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <NotePencil size={18} color={colors.onPrimary} weight="bold" />
+                            <Text style={[styles.treatButtonText, { color: colors.onPrimary }]}>Registrar Providência</Text>
+                        </View>
                     </TouchableOpacity>
                 </View>
             )}
 
             {canTreat && showTreatment && (
-                <View style={styles.treatmentSection}>
-                    <Text style={styles.treatmentTitle}>
-                        {isVP ? '🏦 Registrar Devolutiva' : '📚 Registrar Providência'}
-                    </Text>
-                    <Text style={styles.treatmentHint}>{getTreatmentHint()}</Text>
+                <View style={[styles.treatmentSection, { backgroundColor: colors.surface, borderColor: colors.outline + '30' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        {isVP
+                            ? <Buildings size={20} color={colors.onSurface} weight="bold" />
+                            : <BookOpen size={20} color={colors.onSurface} weight="bold" />}
+                        <Text style={[styles.treatmentTitle, { color: colors.onSurface }]}>
+                            {isVP ? 'Registrar Devolutiva' : 'Registrar Providência'}
+                        </Text>
+                    </View>
+                    <Text style={[styles.treatmentHint, { color: colors.onSurfaceVariant }]}>{getTreatmentHint()}</Text>
 
                     {/* Audio option */}
-                    <Text style={styles.inputSectionLabel}>🎙️ Gravar o relato da providência (opcional)</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8, marginTop: 4 }}>
+                        <Microphone size={16} color={colors.onSurfaceVariant} />
+                        <Text style={[styles.inputSectionLabel, { color: colors.onSurfaceVariant, marginBottom: 0, marginTop: 0 }]}>Gravar o relato da providência (opcional)</Text>
+                    </View>
                     <AudioRecorder
                         onTranscriptionComplete={handleTranscriptionComplete}
-                        isProcessing={processText.isPending}
+                        isProcessing={aiText.isPending}
                     />
 
-                    <Text style={styles.orDivider}>— OU DIGITAR ABAIXO —</Text>
+                    <Text style={[styles.orDivider, { color: colors.onSurfaceVariant }]}>— OU DIGITAR ABAIXO —</Text>
 
-                    <Text style={styles.inputSectionLabel}>✌️ Descreva a providência tomada</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                        <PencilSimple size={16} color={colors.onSurfaceVariant} />
+                        <Text style={[styles.inputSectionLabel, { color: colors.onSurfaceVariant, marginBottom: 0, marginTop: 0 }]}>Descreva a providência tomada</Text>
+                    </View>
                     <TextInput
-                        style={styles.textInput}
+                        style={[styles.textInput, { backgroundColor: colors.background, borderColor: colors.outline + '50', color: colors.onSurface }]}
                         multiline
                         placeholder="Ex: Realizei conversa com o aluno e seus responsáveis..."
-                        placeholderTextColor={COLORS.textMuted}
+                        placeholderTextColor={colors.onSurfaceVariant}
                         value={manualTreatmentText}
                         onChangeText={setManualTreatmentText}
                         textAlignVertical="top"
                     />
 
-                    <TouchableOpacity
-                        style={[styles.actionBtn, styles.aiBtn, processText.isPending && { opacity: 0.7 }]}
-                        onPress={handleTextSubmit}
-                        disabled={processText.isPending}
-                    >
-                        {processText.isPending ? (
-                            <ActivityIndicator size="small" color={COLORS.white} />
-                        ) : (
-                            <Text style={styles.actionBtnText}>✨ Formatar com IA (opcional)</Text>
-                        )}
-                    </TouchableOpacity>
+                    {aiText.isPending ? (
+                        <AIProcessingIndicator
+                            label="Formatando providência com I.A."
+                            onCancel={() => aiText.reset()}
+                        />
+                    ) : (
+                        <TouchableOpacity
+                            style={[styles.actionBtn, styles.aiBtn]}
+                            onPress={handleTextSubmit}
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <Sparkle size={18} color={colors.onPrimary} weight="fill" />
+                                <Text style={[styles.actionBtnText, { color: colors.onPrimary }]}>Formatar com IA (opcional)</Text>
+                            </View>
+                        </TouchableOpacity>
+                    )}
+
+                    {/* Manual final category picker (mandatory for OUTRO when concluding) */}
+                    {occurrence.category === OccurrenceCategory.OUTRO && (
+                        <View style={[styles.finalCategorySection, { backgroundColor: colors.warning + '15', borderColor: colors.warning + '40' }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                                <Tag size={16} color={colors.onSurface} weight="bold" />
+                                <Text style={[styles.finalCategoryTitle, { color: colors.onSurface }]}>
+                                    Categoria Final {showFinalCategoryPicker ? '' : '(obrigatória para concluir)'}
+                                </Text>
+                            </View>
+                            <Text style={[styles.finalCategoryHint, { color: colors.onSurfaceVariant }]}>
+                                Como esta ocorrência foi criada com a categoria "Outro", selecione a classificação correta antes de concluir.
+                            </Text>
+
+                            {!showFinalCategoryPicker && !selectedFinalCategory && (
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, { backgroundColor: colors.warning }]}
+                                    onPress={() => setShowFinalCategoryPicker(true)}
+                                >
+                                    <Text style={[styles.actionBtnText, { color: colors.onPrimary }]}>Selecionar Categoria Final</Text>
+                                </TouchableOpacity>
+                            )}
+
+                            {selectedFinalCategory && !showFinalCategoryPicker && (
+                                <TouchableOpacity
+                                    style={[styles.selectedCategoryChip, { backgroundColor: colors.success + '20', borderColor: colors.success + '40' }]}
+                                    onPress={() => setShowFinalCategoryPicker(true)}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                                        <CheckCircle size={16} color={colors.success} weight="fill" />
+                                        <Text style={[styles.selectedCategoryText, { color: colors.success }]}>
+                                            {FINAL_CATEGORY_LABELS[selectedFinalCategory] ?? selectedFinalCategory}
+                                        </Text>
+                                    </View>
+                                    <Text style={[styles.changeCategoryText, { color: colors.primary }]}>Alterar</Text>
+                                </TouchableOpacity>
+                            )}
+
+                            {showFinalCategoryPicker && (
+                                <ScrollView style={[styles.finalCategoryList, { backgroundColor: colors.surface, borderColor: colors.outline + '30' }]} nestedScrollEnabled>
+                                    {Object.values(OccurrenceFinalCategory).map((cat) => (
+                                        <TouchableOpacity
+                                            key={cat}
+                                            style={[
+                                                styles.finalCategoryItem,
+                                                { borderBottomColor: colors.outline + '20' },
+                                                selectedFinalCategory === cat && { backgroundColor: colors.primary + '15' },
+                                            ]}
+                                            onPress={() => {
+                                                setSelectedFinalCategory(cat);
+                                                setShowFinalCategoryPicker(false);
+                                            }}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.finalCategoryItemText,
+                                                    { color: colors.onSurface },
+                                                    selectedFinalCategory === cat && { color: colors.primary, fontWeight: '700' },
+                                                ]}
+                                            >
+                                                {FINAL_CATEGORY_LABELS[cat] ?? cat}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            )}
+                        </View>
+                    )}
 
                     {/* Action buttons */}
                     <View style={styles.actionButtons}>
                         {occurrence.status !== OccurrenceStatus.CONCLUDED && (
                             <TouchableOpacity
-                                style={[styles.actionBtn, styles.resolveBtn]}
+                                style={[styles.actionBtn, { backgroundColor: colors.success }]}
                                 onPress={() => {
                                     handleSubmitAction(isVP ? 'vp_resolve' : 'resolve');
                                 }}
                             >
-                                <Text style={styles.actionBtnText}>✔ Concluir Ocorrência</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    <CheckCircle size={18} color={colors.onPrimary} weight="bold" />
+                                    <Text style={[styles.actionBtnText, { color: colors.onPrimary }]}>Concluir Ocorrência</Text>
+                                </View>
                             </TouchableOpacity>
                         )}
                         {occurrence.status === OccurrenceStatus.PENDING_TUTOR && !isVP && (
                             <TouchableOpacity
-                                style={[styles.actionBtn, styles.escalateBtn]}
+                                style={[styles.actionBtn, { backgroundColor: colors.warning }]}
                                 onPress={() => {
                                     handleSubmitAction('escalate');
                                 }}
                             >
-                                <Text style={styles.actionBtnText}>⬆️ Encaminhar à Vice-Direção</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    <ArrowUp size={18} color={colors.onPrimary} weight="bold" />
+                                    <Text style={[styles.actionBtnText, { color: colors.onPrimary }]}>Encaminhar à Vice-Direção</Text>
+                                </View>
                             </TouchableOpacity>
                         )}
                     </View>
 
                     <TouchableOpacity style={styles.cancelTreatBtn} onPress={() => setShowTreatment(false)}>
-                        <Text style={styles.cancelTreatText}>Cancelar</Text>
+                        <Text style={[styles.cancelTreatText, { color: colors.onSurfaceVariant }]}>Cancelar</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -581,17 +774,23 @@ export default function OccurrenceDetailScreen() {
             {occurrence.status === OccurrenceStatus.CONCLUDED && (
                 <View style={[styles.section, { borderTopWidth: 0, paddingBottom: 0, paddingTop: 10, gap: 10 }]}>
                     <TouchableOpacity
-                        style={[styles.actionBtn, styles.pdfBtn]}
+                        style={[styles.actionBtn, { backgroundColor: colors.primary }]}
                         onPress={handleExportPDF}
                     >
-                        <Text style={styles.actionBtnText}>📄 Exportar Relatório em PDF</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <FilePdf size={18} color={colors.onPrimary} weight="bold" />
+                            <Text style={[styles.actionBtnText, { color: colors.onPrimary }]}>Exportar Relatório em PDF</Text>
+                        </View>
                     </TouchableOpacity>
                     {isVP && (
                         <TouchableOpacity
                             style={[styles.actionBtn, styles.whatsappBtn]}
                             onPress={handleSendWhatsApp}
                         >
-                            <Text style={styles.actionBtnText}>📱 Notificar Responsável via WhatsApp</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <WhatsappLogo size={18} color="#fff" weight="bold" />
+                                <Text style={[styles.actionBtnText, { color: '#fff' }]}>Notificar Responsável via WhatsApp</Text>
+                            </View>
                         </TouchableOpacity>
                     )}
                 </View>
@@ -601,10 +800,13 @@ export default function OccurrenceDetailScreen() {
             {(isAdmin || isVP) && (
                 <View style={styles.adminSection}>
                     <TouchableOpacity
-                        style={styles.deleteBtn}
+                        style={[styles.deleteBtn, { backgroundColor: colors.error + '15', borderColor: colors.error }]}
                         onPress={handleDelete}
                     >
-                        <Text style={styles.deleteBtnText}>🗑️ Excluir Ocorrência Permanentemente</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Trash size={18} color={colors.error} weight="bold" />
+                            <Text style={[styles.deleteBtnText, { color: colors.error }]}>Excluir Ocorrência Permanentemente</Text>
+                        </View>
                     </TouchableOpacity>
                 </View>
             )}
@@ -612,8 +814,8 @@ export default function OccurrenceDetailScreen() {
             {/* Loading overlay for action submission */}
             {addAction.isPending && (
                 <View style={styles.savingOverlay}>
-                    <ActivityIndicator size="large" color={COLORS.primary} />
-                    <Text style={styles.savingText}>Salvando tratativa...</Text>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                    <Text style={[styles.savingText, { color: colors.onSurfaceVariant }]}>Salvando tratativa...</Text>
                 </View>
             )}
 
@@ -637,7 +839,6 @@ export default function OccurrenceDetailScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background,
     },
     content: {
         padding: 20,
@@ -647,20 +848,21 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: COLORS.background,
         gap: 12,
     },
     loadingText: {
         fontSize: 14,
-        color: COLORS.textSecondary,
     },
-    errorIcon: {
-        fontSize: 48,
-        marginBottom: 8,
+    errorIconCircle: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 12,
     },
     errorText: {
         fontSize: 16,
-        color: COLORS.textSecondary,
         marginBottom: 16,
     },
     backLinkButton: {
@@ -668,17 +870,14 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
     },
     backLinkText: {
-        color: COLORS.primary,
         fontWeight: '600',
         fontSize: 15,
     },
     headerCard: {
-        backgroundColor: COLORS.surface,
         borderRadius: 16,
         padding: 20,
         marginBottom: 20,
         borderWidth: 1,
-        borderColor: COLORS.border + '30',
     },
     headerTop: {
         flexDirection: 'row',
@@ -688,16 +887,13 @@ const styles = StyleSheet.create({
     },
     date: {
         fontSize: 12,
-        color: COLORS.textMuted,
     },
     studentName: {
         fontSize: 22,
         fontWeight: '800',
-        color: COLORS.textPrimary,
     },
     className: {
         fontSize: 14,
-        color: COLORS.textSecondary,
         marginTop: 2,
         marginBottom: 12,
     },
@@ -708,14 +904,12 @@ const styles = StyleSheet.create({
     metaItem: {},
     metaLabel: {
         fontSize: 11,
-        color: COLORS.textMuted,
         fontWeight: '600',
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },
     metaValue: {
         fontSize: 14,
-        color: COLORS.textPrimary,
         fontWeight: '500',
         marginTop: 2,
     },
@@ -725,28 +919,20 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 16,
         fontWeight: '700',
-        color: COLORS.textPrimary,
         marginBottom: 10,
     },
     descriptionBox: {
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         padding: 16,
         borderWidth: 1,
-        borderColor: COLORS.border + '30',
     },
     descriptionText: {
         fontSize: 15,
-        color: COLORS.textPrimary,
         lineHeight: 24,
     },
-    originalBox: {
-        backgroundColor: COLORS.surfaceLight + '50',
-        borderColor: COLORS.border + '20',
-    },
+    originalBox: {},
     originalText: {
         fontStyle: 'italic',
-        color: COLORS.textSecondary,
     },
     timelineItem: {
         flexDirection: 'row',
@@ -757,7 +943,6 @@ const styles = StyleSheet.create({
         width: 10,
         height: 10,
         borderRadius: 5,
-        backgroundColor: COLORS.primary,
         marginTop: 6,
         marginRight: 12,
         zIndex: 1,
@@ -768,15 +953,12 @@ const styles = StyleSheet.create({
         top: 16,
         bottom: -12,
         width: 2,
-        backgroundColor: COLORS.border + '40',
     },
     timelineContent: {
         flex: 1,
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         padding: 14,
         borderWidth: 1,
-        borderColor: COLORS.border + '20',
     },
     timelineHeader: {
         flexDirection: 'row',
@@ -787,21 +969,17 @@ const styles = StyleSheet.create({
     timelineType: {
         fontSize: 13,
         fontWeight: '700',
-        color: COLORS.primary,
     },
     timelineDate: {
         fontSize: 11,
-        color: COLORS.textMuted,
         marginTop: 2,
     },
     timelineAuthor: {
         fontSize: 12,
-        color: COLORS.textSecondary,
         marginBottom: 6,
     },
     timelineDescription: {
         fontSize: 14,
-        color: COLORS.textPrimary,
         lineHeight: 22,
     },
     editActionBtn: {
@@ -809,18 +987,14 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
     },
     editActionText: {
-        color: COLORS.primary,
         fontSize: 13,
         fontWeight: '600',
     },
     editInput: {
         minHeight: 80,
-        backgroundColor: COLORS.background,
         padding: 12,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: COLORS.border,
-        color: COLORS.textPrimary,
         fontSize: 14,
     },
     editActions: {
@@ -834,11 +1008,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14,
     },
     editCancelText: {
-        color: COLORS.textMuted,
         fontWeight: '600',
     },
     editSaveBtn: {
-        backgroundColor: COLORS.primary,
         paddingVertical: 8,
         paddingHorizontal: 18,
         borderRadius: 8,
@@ -846,32 +1018,25 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     editSaveText: {
-        color: '#fff',
         fontWeight: '700',
     },
     treatmentPrompt: {
-        backgroundColor: COLORS.primary + '10',
         borderRadius: 16,
         padding: 20,
         borderWidth: 1,
-        borderColor: COLORS.primary + '30',
         marginTop: 8,
         marginBottom: 16,
     },
     treatmentPromptTitle: {
         fontSize: 17,
         fontWeight: '700',
-        color: COLORS.textPrimary,
-        marginBottom: 6,
     },
     treatmentHint: {
         fontSize: 14,
-        color: COLORS.textSecondary,
         lineHeight: 22,
         marginBottom: 16,
     },
     treatButton: {
-        backgroundColor: COLORS.primary,
         borderRadius: 12,
         paddingHorizontal: 24,
         paddingVertical: 14,
@@ -880,49 +1045,39 @@ const styles = StyleSheet.create({
     treatButtonText: {
         fontSize: 15,
         fontWeight: '700',
-        color: COLORS.white,
     },
     treatmentSection: {
-        backgroundColor: COLORS.surface,
         borderRadius: 16,
         padding: 20,
         marginTop: 8,
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: COLORS.border + '30',
     },
     treatmentTitle: {
         fontSize: 17,
         fontWeight: '700',
-        color: COLORS.textPrimary,
-        marginBottom: 6,
     },
     inputSectionLabel: {
         fontSize: 14,
         fontWeight: '600',
-        color: COLORS.textSecondary,
         marginBottom: 8,
         marginTop: 4,
     },
     orDivider: {
         textAlign: 'center',
         marginVertical: 16,
-        color: COLORS.textMuted,
         fontWeight: '700',
         fontSize: 12,
         letterSpacing: 1,
     },
     textInput: {
-        backgroundColor: COLORS.background,
         borderRadius: 12,
         padding: 16,
-        color: COLORS.textPrimary,
         minHeight: 120,
         textAlignVertical: 'top',
         fontSize: 15,
         marginBottom: 12,
         borderWidth: 1,
-        borderColor: COLORS.border + '50',
         lineHeight: 22,
     },
     actionButtons: {
@@ -942,35 +1097,22 @@ const styles = StyleSheet.create({
         backgroundColor: '#4E5BA6',
         marginBottom: 4,
     },
-    pdfBtn: {
-        backgroundColor: COLORS.primary,
-    },
     whatsappBtn: {
         backgroundColor: '#25D366',
-    },
-    resolveBtn: {
-        backgroundColor: COLORS.success,
-    },
-    escalateBtn: {
-        backgroundColor: COLORS.warning,
     },
     deleteBtn: {
         paddingVertical: 16,
         borderRadius: 12,
         alignItems: 'center',
-        backgroundColor: '#FF444415',
         borderWidth: 1.5,
-        borderColor: COLORS.error,
     },
     deleteBtnText: {
         fontSize: 15,
         fontWeight: '700',
-        color: COLORS.error,
     },
     actionBtnText: {
         fontSize: 15,
         fontWeight: '700',
-        color: COLORS.white,
     },
     cancelTreatBtn: {
         paddingVertical: 12,
@@ -979,7 +1121,6 @@ const styles = StyleSheet.create({
     },
     cancelTreatText: {
         fontSize: 14,
-        color: COLORS.textMuted,
         fontWeight: '500',
     },
     savingOverlay: {
@@ -989,6 +1130,53 @@ const styles = StyleSheet.create({
     savingText: {
         marginTop: 8,
         fontSize: 14,
-        color: COLORS.textSecondary,
+    },
+    finalCategorySection: {
+        marginTop: 16,
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+    },
+    finalCategoryTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    finalCategoryHint: {
+        fontSize: 13,
+        lineHeight: 20,
+        marginBottom: 12,
+    },
+    selectedCategoryChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderRadius: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderWidth: 1,
+    },
+    selectedCategoryText: {
+        fontSize: 14,
+        fontWeight: '600',
+        flex: 1,
+    },
+    changeCategoryText: {
+        fontSize: 13,
+        fontWeight: '600',
+        marginLeft: 8,
+    },
+    finalCategoryList: {
+        maxHeight: 300,
+        borderRadius: 10,
+        borderWidth: 1,
+        overflow: 'hidden',
+    },
+    finalCategoryItem: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderBottomWidth: 1,
+    },
+    finalCategoryItemText: {
+        fontSize: 14,
     },
 });

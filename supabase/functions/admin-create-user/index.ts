@@ -1,60 +1,87 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { verifyAuth, ensureAdmin } from "../_shared/auth.ts";
+import { createAdminClient } from "../_shared/supabase.ts";
+import { errorResponse, jsonResponse } from "../_shared/errors.ts";
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    );
+    const auth = await verifyAuth(req, corsHeaders);
+    if (!auth.ok) return auth.response;
 
-    const { email, password, full_name, role } = await req.json();
+    const isAdmin = await ensureAdmin(auth.user.id);
+    if (!isAdmin) return errorResponse(corsHeaders, 403, "Admin access required");
+
+    const supabaseClient = createAdminClient();
+
+    const { email, password, full_name, role, whatsapp_number } = await req.json();
 
     if (!email || !password || !full_name) {
-      return new Response(JSON.stringify({ error: "Missing required fields" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return errorResponse(corsHeaders, 400, "Missing required fields");
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedName = String(full_name).trim();
+    const normalizedRole = role || 'professor';
+    const normalizedPassword = String(password);
+    const normalizedWhatsapp = typeof whatsapp_number === 'string'
+      ? whatsapp_number.trim().replace(/\D/g, '') || null
+      : null;
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return errorResponse(corsHeaders, 400, "Invalid email format");
+    }
+
+    if (normalizedName.length < 3) {
+      return errorResponse(corsHeaders, 400, "Full name must have at least 3 characters");
+    }
+
+    if (normalizedPassword.length < 8) {
+      return errorResponse(corsHeaders, 400, "Password must have at least 8 characters");
+    }
+
+    const hasUpper = /[A-Z]/.test(normalizedPassword);
+    const hasLower = /[a-z]/.test(normalizedPassword);
+    const hasNumber = /\d/.test(normalizedPassword);
+    if (!hasUpper || !hasLower || !hasNumber) {
+      return errorResponse(corsHeaders, 400, "Password must include uppercase, lowercase, and number");
     }
 
     // Create user with admin API
     const { data: user, error: createError } = await supabaseClient.auth.admin.createUser({
-      email,
-      password,
+      email: normalizedEmail,
+      password: normalizedPassword,
       email_confirm: true,
-      user_metadata: { full_name, role: role || 'professor' },
+      user_metadata: { full_name: normalizedName, role: normalizedRole },
     });
 
     if (createError) {
       // If user already exists, we might want to return that error clearly
-      return new Response(JSON.stringify({ error: createError.message }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return errorResponse(corsHeaders, 400, createError.message);
     }
 
-    // Profile Trigger should handle profile creation based on user_metadata,
-    // but we can double check or enforce updates here if needed.
-    // For now, rely on `on_auth_user_created` trigger which uses metadata.
+    if (user?.user?.id) {
+      await supabaseClient
+        .from('profiles')
+        .update({
+          full_name: normalizedName,
+          role: normalizedRole,
+          whatsapp_number: normalizedWhatsapp,
+          force_password_change: true,
+        })
+        .eq('auth_id', user.user.id);
+    }
 
-    return new Response(JSON.stringify({ user }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+    return jsonResponse({ user }, 200, corsHeaders);
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 400,
-    });
+    return errorResponse(corsHeaders, 400, (error as Error).message);
   }
 });

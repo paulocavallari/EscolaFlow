@@ -2,12 +2,10 @@
 // Edge Function: CSV Bulk Import for Students (Admin-only)
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { getCorsHeaders } from '../_shared/cors.ts';
+import { verifyAuth, ensureAdmin } from '../_shared/auth.ts';
+import { createAdminClient } from '../_shared/supabase.ts';
+import { errorResponse, jsonResponse } from '../_shared/errors.ts';
 
 interface CSVRow {
     nome: string;
@@ -59,62 +57,27 @@ function parseCSV(csvText: string): CSVRow[] {
 }
 
 serve(async (req: Request) => {
+    const corsHeaders = getCorsHeaders(req);
+
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
 
     try {
-        // Verify auth and admin role
-        const authHeader = req.headers.get('Authorization');
-        if (!authHeader) {
-            return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
-                status: 401,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-        }
+        const auth = await verifyAuth(req, corsHeaders);
+        if (!auth.ok) return auth.response;
 
-        const supabaseClient = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-            { global: { headers: { Authorization: authHeader } } }
-        );
+        const isAdmin = await ensureAdmin(auth.user.id);
+        if (!isAdmin) return errorResponse(corsHeaders, 403, 'Admin access required');
 
-        const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-        if (authError || !user) {
-            return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-                status: 401,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-        }
-
-        // Check admin role
-        const supabaseAdmin = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-        );
-
-        const { data: profile } = await supabaseAdmin
-            .from('profiles')
-            .select('role')
-            .eq('auth_id', user.id)
-            .single();
-
-        if (!profile || profile.role !== 'admin') {
-            return new Response(JSON.stringify({ error: 'Admin access required' }), {
-                status: 403,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-        }
+        const supabaseAdmin = createAdminClient();
 
         // Parse CSV from request body
         const formData = await req.formData();
         const csvFile = formData.get('file') as File;
 
         if (!csvFile) {
-            return new Response(JSON.stringify({ error: 'No CSV file provided' }), {
-                status: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
+            return errorResponse(corsHeaders, 400, 'No CSV file provided');
         }
 
         const csvText = await csvFile.text();
@@ -123,17 +86,11 @@ serve(async (req: Request) => {
         try {
             rows = parseCSV(csvText);
         } catch (parseError) {
-            return new Response(JSON.stringify({ error: String(parseError) }), {
-                status: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
+            return errorResponse(corsHeaders, 400, String(parseError));
         }
 
         if (rows.length === 0) {
-            return new Response(JSON.stringify({ error: 'CSV file is empty or has no valid rows' }), {
-                status: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
+            return errorResponse(corsHeaders, 400, 'CSV file is empty or has no valid rows');
         }
 
         // Validate foreign keys exist
@@ -206,15 +163,9 @@ serve(async (req: Request) => {
             }
         }
 
-        return new Response(JSON.stringify(result), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return jsonResponse(result as unknown as Record<string, unknown>, 200, corsHeaders);
     } catch (error) {
         console.error('CSV import error:', error);
-        return new Response(JSON.stringify({ error: 'Internal server error' }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return errorResponse(corsHeaders, 500, 'Internal server error');
     }
 });

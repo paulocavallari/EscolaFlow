@@ -11,11 +11,13 @@ import {
     ScrollView,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import { COLORS } from '../lib/constants';
+import { DownloadSimple, FileText, FolderOpen, UploadSimple, WarningCircle } from 'phosphor-react-native';
 import { CSVImportResult } from '../types/database';
 import { useImportCSV } from '../hooks/useStudents';
+import { useTheme } from '../lib/theme';
 
 export function CSVImporter() {
+    const { colors } = useTheme();
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [fileName, setFileName] = useState<string>('');
     const [result, setResult] = useState<CSVImportResult | null>(null);
@@ -53,20 +55,28 @@ export function CSVImporter() {
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>📥 Importar Alunos via CSV</Text>
-            <Text style={styles.subtitle}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <DownloadSimple size={20} color={colors.onSurface} weight="bold" />
+                <Text style={[styles.title, { color: colors.onSurface }]}>Importar Alunos via CSV</Text>
+            </View>
+            <Text style={[styles.subtitle, { color: colors.onSurfaceVariant }]}>
                 Colunas aceitas: Nome, RA, TurmaID
             </Text>
 
             {/* File Picker */}
             <TouchableOpacity
-                style={styles.pickButton}
+                style={[styles.pickButton, { backgroundColor: colors.surface, borderColor: colors.outline }]}
                 onPress={pickFile}
                 activeOpacity={0.7}
             >
-                <Text style={styles.pickButtonText}>
-                    {selectedFile ? '📄 ' + fileName : '📁 Selecionar arquivo CSV'}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    {selectedFile
+                        ? <FileText size={18} color={colors.onSurfaceVariant} />
+                        : <FolderOpen size={18} color={colors.onSurfaceVariant} />}
+                    <Text style={[styles.pickButtonText, { color: colors.onSurfaceVariant }]}>
+                        {selectedFile ? fileName : 'Selecionar arquivo CSV'}
+                    </Text>
+                </View>
             </TouchableOpacity>
 
             {/* Import Button */}
@@ -74,6 +84,7 @@ export function CSVImporter() {
                 <TouchableOpacity
                     style={[
                         styles.importButton,
+                        { backgroundColor: colors.primary },
                         importMutation.isPending && styles.importButtonDisabled,
                     ]}
                     onPress={handleImport}
@@ -81,45 +92,48 @@ export function CSVImporter() {
                     activeOpacity={0.7}
                 >
                     {importMutation.isPending ? (
-                        <ActivityIndicator size="small" color={COLORS.white} />
+                        <ActivityIndicator size="small" color={colors.onPrimary} />
                     ) : (
-                        <Text style={styles.importButtonText}>⬆️ Importar</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <UploadSimple size={16} color={colors.onPrimary} weight="bold" />
+                            <Text style={[styles.importButtonText, { color: colors.onPrimary }]}>Importar</Text>
+                        </View>
                     )}
                 </TouchableOpacity>
             )}
 
             {/* Results */}
             {result && (
-                <View style={styles.resultContainer}>
-                    <Text style={styles.resultTitle}>Resultado da Importação</Text>
+                <View style={[styles.resultContainer, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.resultTitle, { color: colors.onSurface }]}>Resultado da Importação</Text>
 
                     <View style={styles.statsRow}>
-                        <View style={[styles.statBox, { backgroundColor: COLORS.info + '20' }]}>
-                            <Text style={[styles.statNumber, { color: COLORS.info }]}>
+                        <View style={[styles.statBox, { backgroundColor: colors.info + '20' }]}>
+                            <Text style={[styles.statNumber, { color: colors.info }]}>
                                 {result.total}
                             </Text>
-                            <Text style={styles.statLabel}>Total</Text>
+                            <Text style={[styles.statLabel, { color: colors.onSurfaceVariant }]}>Total</Text>
                         </View>
-                        <View style={[styles.statBox, { backgroundColor: COLORS.success + '20' }]}>
-                            <Text style={[styles.statNumber, { color: COLORS.success }]}>
+                        <View style={[styles.statBox, { backgroundColor: colors.success + '20' }]}>
+                            <Text style={[styles.statNumber, { color: colors.success }]}>
                                 {result.inserted}
                             </Text>
-                            <Text style={styles.statLabel}>Inseridos</Text>
+                            <Text style={[styles.statLabel, { color: colors.onSurfaceVariant }]}>Inseridos</Text>
                         </View>
-                        <View style={[styles.statBox, { backgroundColor: COLORS.warning + '20' }]}>
-                            <Text style={[styles.statNumber, { color: COLORS.warning }]}>
+                        <View style={[styles.statBox, { backgroundColor: colors.warning + '20' }]}>
+                            <Text style={[styles.statNumber, { color: colors.warning }]}>
                                 {result.skipped}
                             </Text>
-                            <Text style={styles.statLabel}>Ignorados</Text>
+                            <Text style={[styles.statLabel, { color: colors.onSurfaceVariant }]}>Ignorados</Text>
                         </View>
                     </View>
 
                     {/* Errors */}
                     {result.errors.length > 0 && (
                         <ScrollView style={styles.errorList}>
-                            <Text style={styles.errorTitle}>Erros:</Text>
+                            <Text style={[styles.errorTitle, { color: colors.error }]}>Erros:</Text>
                             {result.errors.map((err, idx) => (
-                                <Text key={idx} style={styles.errorItem}>
+                                <Text key={idx} style={[styles.errorItem, { color: colors.onSurfaceVariant }]}>
                                     Linha {err.row}: {err.message}
                                 </Text>
                             ))}
@@ -130,10 +144,13 @@ export function CSVImporter() {
 
             {/* Error state */}
             {importMutation.isError && (
-                <View style={styles.errorBox}>
-                    <Text style={styles.errorText}>
-                        ❌ Erro na importação: {importMutation.error?.message}
-                    </Text>
+                <View style={[styles.errorBox, { backgroundColor: colors.error + '15' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <WarningCircle size={16} color={colors.error} />
+                        <Text style={[styles.errorText, { color: colors.error }]}>
+                            Erro na importação: {importMutation.error?.message}
+                        </Text>
+                    </View>
                 </View>
             )}
         </View>
@@ -147,30 +164,23 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 18,
         fontWeight: '700',
-        color: COLORS.textPrimary,
-        marginBottom: 4,
     },
     subtitle: {
         fontSize: 13,
-        color: COLORS.textSecondary,
         marginBottom: 20,
     },
     pickButton: {
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         padding: 16,
         alignItems: 'center',
         borderWidth: 2,
-        borderColor: COLORS.border,
         borderStyle: 'dashed',
     },
     pickButtonText: {
         fontSize: 15,
-        color: COLORS.textSecondary,
         fontWeight: '500',
     },
     importButton: {
-        backgroundColor: COLORS.primary,
         borderRadius: 12,
         padding: 14,
         alignItems: 'center',
@@ -182,18 +192,15 @@ const styles = StyleSheet.create({
     importButtonText: {
         fontSize: 15,
         fontWeight: '600',
-        color: COLORS.white,
     },
     resultContainer: {
         marginTop: 20,
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         padding: 16,
     },
     resultTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: COLORS.textPrimary,
         marginBottom: 12,
     },
     statsRow: {
@@ -212,7 +219,6 @@ const styles = StyleSheet.create({
     },
     statLabel: {
         fontSize: 11,
-        color: COLORS.textSecondary,
         marginTop: 2,
     },
     errorList: {
@@ -222,24 +228,21 @@ const styles = StyleSheet.create({
     errorTitle: {
         fontSize: 14,
         fontWeight: '600',
-        color: COLORS.error,
         marginBottom: 6,
     },
     errorItem: {
         fontSize: 12,
-        color: COLORS.textSecondary,
         marginBottom: 4,
         paddingLeft: 8,
     },
     errorBox: {
         marginTop: 12,
-        backgroundColor: COLORS.error + '15',
         borderRadius: 8,
         padding: 12,
     },
     errorText: {
         fontSize: 13,
-        color: COLORS.error,
+        flex: 1,
     },
 });
 

@@ -13,7 +13,8 @@ import {
     Linking,
 } from 'react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
-import { COLORS } from '../lib/constants';
+import { Microphone, Trash, Sparkle, StopCircle } from 'phosphor-react-native';
+import { useTheme } from '../lib/theme';
 
 const PROCESSING_MESSAGES = [
     'Analisando áudio...',
@@ -23,6 +24,7 @@ const PROCESSING_MESSAGES = [
 ];
 
 function ProcessingView({ onCancel }: { onCancel?: () => void }) {
+    const { colors } = useTheme();
     const [msgIndex, setMsgIndex] = useState(0);
     const [elapsed, setElapsed] = useState(0);
 
@@ -41,12 +43,12 @@ function ProcessingView({ onCancel }: { onCancel?: () => void }) {
 
     return (
         <View style={styles.container}>
-            <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.processingText}>{PROCESSING_MESSAGES[msgIndex]}</Text>
-            <Text style={styles.processingSubtext}>{elapsed}s — aguarde</Text>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.processingText, { color: colors.onSurface }]}>{PROCESSING_MESSAGES[msgIndex]}</Text>
+            <Text style={[styles.processingSubtext, { color: colors.onSurfaceVariant }]}>{elapsed}s — aguarde</Text>
             {onCancel && (
-                <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-                    <Text style={styles.cancelButtonText}>Cancelar</Text>
+                <TouchableOpacity style={[styles.cancelButton, { borderColor: colors.onSurfaceVariant }]} onPress={onCancel}>
+                    <Text style={[styles.cancelButtonText, { color: colors.onSurfaceVariant }]}>Cancelar</Text>
                 </TouchableOpacity>
             )}
         </View>
@@ -60,6 +62,7 @@ interface AudioRecorderProps {
 }
 
 export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, onCancelProcessing }: AudioRecorderProps) {
+    const { colors } = useTheme();
     const [isRecording, setIsRecording] = useState(false);
     const [isReviewing, setIsReviewing] = useState(false);
     const [finalTranscript, setFinalTranscript] = useState('');
@@ -180,13 +183,15 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
     if (permissionDenied && !permissionGranted) {
         return (
             <View style={styles.container}>
-                <Text style={styles.permissionIcon}>🎙️</Text>
-                <Text style={styles.permissionTitle}>Microfone necessário</Text>
-                <Text style={styles.permissionText}>
+                <View style={[styles.permissionIconCircle, { backgroundColor: colors.surfaceVariant }]}>
+                    <Microphone size={36} color={colors.onSurfaceVariant} weight="duotone" />
+                </View>
+                <Text style={[styles.permissionTitle, { color: colors.onSurface }]}>Microfone necessário</Text>
+                <Text style={[styles.permissionText, { color: colors.onSurfaceVariant }]}>
                     Para gravar o relato, o aplicativo precisa de acesso ao microfone.
                 </Text>
-                <TouchableOpacity style={styles.permissionButton} onPress={handleRequestPermission}>
-                    <Text style={styles.permissionButtonText}>Permitir Acesso ao Microfone</Text>
+                <TouchableOpacity style={[styles.permissionButton, { backgroundColor: colors.primary }]} onPress={handleRequestPermission}>
+                    <Text style={[styles.permissionButtonText, { color: colors.onPrimary }]}>Permitir Acesso ao Microfone</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -200,8 +205,8 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
         <View style={styles.container}>
             {/* Instruction banner */}
             {!isRecording && !isReviewing && !transcript && (
-                <View style={styles.instructionBanner}>
-                    <Text style={styles.instructionText}>
+                <View style={[styles.instructionBanner, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '30' }]}>
+                    <Text style={[styles.instructionText, { color: colors.onSurfaceVariant }]}>
                         Toque no botão vermelho abaixo para iniciar a gravação.{'\n'}
                         Fale o relato da ocorrência com seus próprios termos.
                     </Text>
@@ -209,9 +214,9 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
             )}
 
             {!!transcript && (
-                <View style={styles.transcriptBox}>
-                    <Text style={styles.transcriptLabel}>Transcrição:</Text>
-                    <Text style={[styles.transcriptText, !isRecording && { color: COLORS.textPrimary }]}>
+                <View style={[styles.transcriptBox, { backgroundColor: colors.outline + '40' }]}>
+                    <Text style={[styles.transcriptLabel, { color: colors.onSurfaceVariant }]}>Transcrição:</Text>
+                    <Text style={[styles.transcriptText, !isRecording ? { color: colors.onSurface } : { color: colors.onSurfaceVariant }]}>
                         {transcript}
                     </Text>
                 </View>
@@ -220,16 +225,22 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
             {isReviewing ? (
                 <View style={styles.reviewActions}>
                     <TouchableOpacity
-                        style={[styles.reviewBtn, styles.discardBtn]}
+                        style={[styles.reviewBtn, styles.discardBtn, { backgroundColor: colors.outline + '40', borderColor: colors.outline }]}
                         onPress={handleDiscard}
                     >
-                        <Text style={styles.discardBtnText}>🗑️ Descartar</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Trash size={16} color={colors.error} />
+                            <Text style={[styles.discardBtnText, { color: colors.error }]}>Descartar</Text>
+                        </View>
                     </TouchableOpacity>
                     <TouchableOpacity
-                        style={[styles.reviewBtn, styles.confirmBtn]}
+                        style={[styles.reviewBtn, styles.confirmBtn, { backgroundColor: colors.primary }]}
                         onPress={handleConfirm}
                     >
-                        <Text style={styles.confirmBtnText}>✨ Processar com IA</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Sparkle size={16} color={colors.onPrimary} weight="fill" />
+                            <Text style={[styles.confirmBtnText, { color: colors.onPrimary }]}>Processar com IA</Text>
+                        </View>
                     </TouchableOpacity>
                 </View>
             ) : (
@@ -241,23 +252,22 @@ export function AudioRecorder({ onTranscriptionComplete, isProcessing = false, o
                         <Animated.View
                             style={[
                                 styles.recordButton,
-                                isRecording && styles.recordButtonActive,
+                                { backgroundColor: colors.error, shadowColor: colors.error },
+                                isRecording && [styles.recordButtonActive, { borderColor: '#fff' }],
                                 { transform: [{ scale: pulseAnim }] },
                             ]}
                         >
                             {isRecording ? (
                                 <View style={styles.stopIcon} />
                             ) : (
-                                <View style={styles.micIcon}>
-                                    <Text style={styles.micText}>🎙️</Text>
-                                </View>
+                                <Microphone size={36} color="#fff" weight="bold" />
                             )}
                         </Animated.View>
                     </TouchableOpacity>
 
-                    <Text style={styles.hint}>
+                    <Text style={[styles.hint, { color: colors.onSurfaceVariant }]}>
                         {isRecording
-                            ? '⏹️ Toque para parar a gravação'
+                            ? 'Toque para parar a gravação'
                             : transcript
                                 ? 'Toque para continuar gravando'
                                 : 'Toque para iniciar a gravação'}
@@ -275,17 +285,14 @@ const styles = StyleSheet.create({
         paddingVertical: 24,
     },
     instructionBanner: {
-        backgroundColor: COLORS.primary + '10',
         borderRadius: 12,
         padding: 16,
         marginBottom: 24,
         width: '100%',
         borderWidth: 1,
-        borderColor: COLORS.primary + '30',
     },
     instructionText: {
         fontSize: 14,
-        color: COLORS.textSecondary,
         textAlign: 'center',
         lineHeight: 22,
     },
@@ -293,65 +300,53 @@ const styles = StyleSheet.create({
         width: 88,
         height: 88,
         borderRadius: 44,
-        backgroundColor: COLORS.error,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: COLORS.error,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4,
         shadowRadius: 12,
         elevation: 8,
     },
     recordButtonActive: {
-        backgroundColor: COLORS.error,
         borderWidth: 3,
-        borderColor: COLORS.white,
     },
     stopIcon: {
         width: 26,
         height: 26,
         borderRadius: 4,
-        backgroundColor: COLORS.white,
-    },
-    micIcon: {
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    micText: {
-        fontSize: 36,
+        backgroundColor: '#fff',
     },
     hint: {
         marginTop: 16,
         fontSize: 14,
-        color: COLORS.textSecondary,
         textAlign: 'center',
     },
-    permissionIcon: {
-        fontSize: 48,
+    permissionIconCircle: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
         marginBottom: 12,
     },
     permissionTitle: {
         fontSize: 18,
         fontWeight: '700',
-        color: COLORS.textPrimary,
         marginBottom: 8,
     },
     permissionText: {
         fontSize: 14,
-        color: COLORS.textSecondary,
         textAlign: 'center',
         paddingHorizontal: 24,
         marginBottom: 20,
         lineHeight: 22,
     },
     permissionButton: {
-        backgroundColor: COLORS.primary,
         borderRadius: 12,
         paddingHorizontal: 24,
         paddingVertical: 14,
     },
     permissionButtonText: {
-        color: COLORS.white,
         fontWeight: '700',
         fontSize: 15,
     },
@@ -359,12 +354,10 @@ const styles = StyleSheet.create({
         marginTop: 16,
         fontSize: 16,
         fontWeight: '600',
-        color: COLORS.textPrimary,
     },
     processingSubtext: {
         marginTop: 4,
         fontSize: 13,
-        color: COLORS.textSecondary,
     },
     cancelButton: {
         marginTop: 24,
@@ -372,15 +365,12 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: COLORS.textMuted,
     },
     cancelButtonText: {
         fontSize: 14,
-        color: COLORS.textSecondary,
         fontWeight: '500',
     },
     transcriptBox: {
-        backgroundColor: COLORS.border + '40',
         padding: 16,
         borderRadius: 12,
         marginBottom: 24,
@@ -390,14 +380,12 @@ const styles = StyleSheet.create({
     transcriptLabel: {
         fontSize: 11,
         fontWeight: '700',
-        color: COLORS.textMuted,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
         marginBottom: 6,
     },
     transcriptText: {
         fontSize: 16,
-        color: COLORS.textSecondary,
         lineHeight: 24,
         fontStyle: 'italic',
     },
@@ -418,21 +406,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    confirmBtn: {
-        backgroundColor: COLORS.primary,
-    },
+    confirmBtn: {},
     confirmBtnText: {
-        color: COLORS.white,
         fontSize: 15,
         fontWeight: 'bold',
     },
     discardBtn: {
-        backgroundColor: COLORS.border + '40',
         borderWidth: 1,
-        borderColor: COLORS.border,
     },
     discardBtnText: {
-        color: COLORS.error,
         fontSize: 15,
         fontWeight: '600',
     },

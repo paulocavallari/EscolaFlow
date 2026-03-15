@@ -38,7 +38,12 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function createAdmin() {
     const email = 'admin@virgiliocapoani.com.br';
-    const password = 'Pa7412365**';
+    const password = envVars.ADMIN_INITIAL_PASSWORD || process.env.ADMIN_INITIAL_PASSWORD;
+
+    if (!password) {
+        console.error('Missing ADMIN_INITIAL_PASSWORD in environment.');
+        process.exit(1);
+    }
 
     console.log(`Attempting to create user: ${email}`);
 

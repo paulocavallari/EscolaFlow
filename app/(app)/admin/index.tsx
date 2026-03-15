@@ -4,71 +4,80 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { router } from 'expo-router';
-import { COLORS } from '../../../src/lib/constants';
+import { Users, Buildings, Student, ClipboardText, CaretRight } from 'phosphor-react-native';
 import { useProfilesList, useClassesList, useStudentsList } from '../../../src/hooks/useStudents';
+import { useTheme, typography } from '../../../src/lib/theme';
+import type { Icon } from 'phosphor-react-native';
 
 interface AdminCardProps {
-    icon: string;
+    IconComponent: Icon;
     title: string;
     description: string;
     count?: number;
     onPress: () => void;
 }
 
-function AdminCard({ icon, title, description, count, onPress }: AdminCardProps) {
+function AdminCard({ IconComponent, title, description, count, onPress }: AdminCardProps) {
+    const { colors } = useTheme();
+
     return (
-        <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
-            <View style={styles.cardIconContainer}>
-                <Text style={styles.cardIcon}>{icon}</Text>
+        <TouchableOpacity
+            style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+            onPress={onPress}
+            activeOpacity={0.7}
+        >
+            <View style={[styles.cardIconContainer, { backgroundColor: colors.primaryContainer }]}>
+                <IconComponent size={24} color={colors.onPrimaryContainer} weight="duotone" />
             </View>
             <View style={styles.cardContent}>
-                <Text style={styles.cardTitle}>{title}</Text>
-                <Text style={styles.cardDescription}>{description}</Text>
+                <Text style={[styles.cardTitle, { color: colors.onSurface }]}>{title}</Text>
+                <Text style={[styles.cardDescription, { color: colors.onSurfaceVariant }]}>{description}</Text>
             </View>
             {count !== undefined && (
-                <View style={styles.countBadge}>
-                    <Text style={styles.countText}>{count}</Text>
+                <View style={[styles.countBadge, { backgroundColor: colors.primaryContainer }]}>
+                    <Text style={[styles.countText, { color: colors.onPrimaryContainer }]}>{count}</Text>
                 </View>
             )}
-            <Text style={styles.cardArrow}>›</Text>
+            <CaretRight size={20} color={colors.onSurfaceVariant} />
         </TouchableOpacity>
     );
 }
 
 export default function AdminHubScreen() {
+    const { colors } = useTheme();
     const { data: profiles } = useProfilesList();
     const { data: classes } = useClassesList();
     const { data: students } = useStudentsList();
 
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-            <Text style={styles.header}>Painel Administrativo</Text>
-            <Text style={styles.subheader}>Gerencie usuários, turmas e alunos do sistema.</Text>
+        <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.content}>
+            <Text style={[styles.header, { color: colors.onBackground }]}>Painel Administrativo</Text>
+            <Text style={[styles.subheader, { color: colors.onSurfaceVariant }]}>Gerencie usuários, turmas e alunos do sistema.</Text>
 
             <View style={styles.cardList}>
                 <AdminCard
-                    icon="👥"
+                    IconComponent={Users}
                     title="Usuários"
                     description="Gerenciar professores e staff"
                     count={profiles?.length}
                     onPress={() => router.push('/(app)/admin/users')}
                 />
                 <AdminCard
-                    icon="🏫"
+                    IconComponent={Buildings}
                     title="Turmas"
                     description="Criar e editar turmas"
                     count={classes?.length}
                     onPress={() => router.push('/(app)/admin/classes')}
                 />
                 <AdminCard
-                    icon="🎓"
+                    IconComponent={Student}
                     title="Alunos"
                     description="Gerenciar alunos e importar lista CSV"
                     count={students?.length}
                     onPress={() => router.push('/(app)/admin/students')}
                 />
                 <AdminCard
-                    icon="📋"
+                    IconComponent={ClipboardText}
                     title="Tutores"
                     description="Atribuir tutores aos alunos"
                     onPress={() => router.push('/(app)/admin/tutors')}
@@ -81,76 +90,58 @@ export default function AdminHubScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background,
     },
     content: {
         padding: 20,
         paddingBottom: 40,
     },
     header: {
-        fontSize: 24,
+        ...typography.headlineLarge,
         fontWeight: '800',
-        color: COLORS.textPrimary,
         marginBottom: 4,
     },
     subheader: {
-        fontSize: 15,
-        color: COLORS.textSecondary,
+        ...typography.bodyMedium,
         marginBottom: 24,
     },
     cardList: {
         gap: 12,
     },
     card: {
-        backgroundColor: COLORS.surface,
         borderRadius: 16,
         padding: 18,
         flexDirection: 'row',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: COLORS.border + '30',
         minHeight: 72,
     },
     cardIconContainer: {
         width: 48,
         height: 48,
         borderRadius: 14,
-        backgroundColor: COLORS.primary + '15',
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 14,
-    },
-    cardIcon: {
-        fontSize: 24,
     },
     cardContent: {
         flex: 1,
     },
     cardTitle: {
-        fontSize: 16,
+        ...typography.titleMedium,
         fontWeight: '700',
-        color: COLORS.textPrimary,
     },
     cardDescription: {
-        fontSize: 13,
-        color: COLORS.textSecondary,
+        ...typography.bodySmall,
         marginTop: 2,
     },
     countBadge: {
-        backgroundColor: COLORS.primary + '20',
         borderRadius: 10,
         paddingHorizontal: 10,
         paddingVertical: 4,
         marginRight: 8,
     },
     countText: {
-        fontSize: 14,
+        ...typography.labelMedium,
         fontWeight: '700',
-        color: COLORS.primary,
-    },
-    cardArrow: {
-        fontSize: 22,
-        color: COLORS.textMuted,
-        fontWeight: '300',
     },
 });

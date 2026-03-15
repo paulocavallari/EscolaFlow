@@ -8,6 +8,7 @@ import { Asset } from 'expo-asset';
 import { OccurrenceWithRelations, UserRole, ActionType } from '../types/database';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { LOCATION_LABELS, CATEGORY_LABELS, FINAL_CATEGORY_LABELS } from '../lib/constants';
 
 /**
  * Returns a base64 Data URI for the school header image.
@@ -139,8 +140,14 @@ export async function generateOccurrencePDF(occurrence: OccurrenceWithRelations)
   </tr>
   <tr>
     <td class="lbl">Local:</td>
-    <td colspan="3">Dependências da Escola</td>
-  </tr>
+    <td>${occurrence.location ? (LOCATION_LABELS[occurrence.location as keyof typeof LOCATION_LABELS] ?? occurrence.location) : 'Não informado'}</td>
+    <td class="lbl">Categoria:</td>
+    <td>${occurrence.category ? (CATEGORY_LABELS[occurrence.category as keyof typeof CATEGORY_LABELS] ?? occurrence.category) : 'Não informada'}</td>
+  </tr>${occurrence.final_category ? `
+  <tr>
+    <td class="lbl">Categoria Final (IA):</td>
+    <td colspan="3">${FINAL_CATEGORY_LABELS[occurrence.final_category as keyof typeof FINAL_CATEGORY_LABELS] ?? occurrence.final_category}</td>
+  </tr>` : ''}
 </table>
 
 <div class="sec-title">Descrição da Ocorrência</div>

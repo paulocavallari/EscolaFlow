@@ -3,19 +3,21 @@
 
 import React from 'react';
 import { Tabs, Redirect } from 'expo-router';
-import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { House, ClipboardText, GearSix } from 'phosphor-react-native';
 import { useAuth } from '../../src/hooks/useAuth';
 import { UserRole } from '../../src/types/database';
-import { COLORS } from '../../src/lib/constants';
+import { useTheme } from '../../src/lib/theme';
 
 export default function AppLayout() {
     const { session, profile, loading } = useAuth();
+    const { colors } = useTheme();
 
     // Show loading spinner while checking auth
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
+            <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+                <ActivityIndicator size="large" color={colors.primary} />
             </View>
         );
     }
@@ -31,28 +33,27 @@ export default function AppLayout() {
     }
 
     const isAdmin = profile?.role === UserRole.ADMIN;
-    const isVP = profile?.role === UserRole.VICE_DIRECTOR;
 
     return (
         <Tabs
             screenOptions={{
                 tabBarStyle: {
-                    backgroundColor: COLORS.surface,
-                    borderTopColor: COLORS.border + '40',
+                    backgroundColor: colors.surface,
+                    borderTopColor: colors.outlineVariant,
                     borderTopWidth: 1,
                     paddingBottom: 4,
                     height: 60,
                 },
-                tabBarActiveTintColor: COLORS.primary,
-                tabBarInactiveTintColor: COLORS.textMuted,
+                tabBarActiveTintColor: colors.primary,
+                tabBarInactiveTintColor: colors.onSurfaceVariant,
                 tabBarLabelStyle: {
                     fontSize: 11,
                     fontWeight: '600',
                 },
                 headerStyle: {
-                    backgroundColor: COLORS.background,
+                    backgroundColor: colors.background,
                 },
-                headerTintColor: COLORS.textPrimary,
+                headerTintColor: colors.onSurface,
                 headerTitleStyle: {
                     fontWeight: '700',
                 },
@@ -63,7 +64,9 @@ export default function AppLayout() {
                 options={{
                     title: 'Início',
                     tabBarLabel: 'Início',
-                    tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} />,
+                    tabBarIcon: ({ color, focused }) => (
+                        <House size={22} color={color} weight={focused ? 'fill' : 'regular'} />
+                    ),
                     headerTitle: 'Ocorrências VC',
                 }}
             />
@@ -72,7 +75,9 @@ export default function AppLayout() {
                 options={{
                     title: 'Ocorrências',
                     tabBarLabel: 'Ocorrências',
-                    tabBarIcon: ({ color }) => <TabIcon emoji="📋" color={color} />,
+                    tabBarIcon: ({ color, focused }) => (
+                        <ClipboardText size={22} color={color} weight={focused ? 'fill' : 'regular'} />
+                    ),
                     headerShown: false,
                 }}
             />
@@ -81,7 +86,9 @@ export default function AppLayout() {
                 options={{
                     title: 'Administração',
                     tabBarLabel: 'Admin',
-                    tabBarIcon: ({ color }) => <TabIcon emoji="⚙️" color={color} />,
+                    tabBarIcon: ({ color, focused }) => (
+                        <GearSix size={22} color={color} weight={focused ? 'fill' : 'regular'} />
+                    ),
                     headerShown: false,
                     // Hide admin tab for non-admin users
                     href: isAdmin ? undefined : null,
@@ -91,25 +98,10 @@ export default function AppLayout() {
     );
 }
 
-function TabIcon({ emoji, color }: { emoji: string; color: string }) {
-    return (
-        <View style={[styles.tabIcon, { opacity: color === COLORS.primary ? 1 : 0.5 }]}>
-            <Text style={{ fontSize: 20 }}>{emoji}</Text>
-        </View>
-    );
-}
-
 const styles = StyleSheet.create({
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: COLORS.background,
-    },
-    tabIcon: {
-        width: 24,
-        height: 24,
-        alignItems: 'center',
-        justifyContent: 'center',
     },
 });

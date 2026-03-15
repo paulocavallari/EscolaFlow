@@ -2,12 +2,10 @@
 // Edge Function: WhatsApp Notification via Evolution API
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { getCorsHeaders } from '../_shared/cors.ts';
+import { createAdminClient } from '../_shared/supabase.ts';
+import { sendEvolutionMessage } from '../_shared/evolution.ts';
+import { errorResponse, jsonResponse } from '../_shared/errors.ts';
 
 interface NotificationPayload {
     event: 'occurrence_created' | 'status_changed';
@@ -62,58 +60,9 @@ Ocorrência Registrada:
     return '';
 }
 
-/**
- * Send a text message via Evolution API
- */
-async function sendEvolutionMessage(
-    phoneNumber: string,
-    text: string,
-): Promise<{ success: boolean; error?: string }> {
-    const apiUrl = Deno.env.get('EVOLUTION_API_URL');
-    const apiKey = Deno.env.get('EVOLUTION_API_KEY');
-    const instance = Deno.env.get('EVOLUTION_INSTANCE_NAME') ?? 'zap';
-
-    if (!apiUrl || !apiKey) {
-        console.warn('Evolution API credentials not configured');
-        return { success: false, error: 'Evolution API credentials not configured' };
-    }
-
-    // Ensure phone starts with country code (55 for Brazil)
-    const cleaned = phoneNumber.replace(/\D/g, '');
-    const formattedPhone = cleaned.startsWith('55') ? cleaned : `55${cleaned}`;
-
-    const url = `${apiUrl}/message/sendText/${instance}`;
-    console.log(`Sending WhatsApp to ${formattedPhone} via ${url}`);
-
-    try {
-        // Evolution API v2: only 'number' and 'textMessage' are required
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': apiKey,
-            },
-            body: JSON.stringify({
-                number: formattedPhone,
-                textMessage: { text },
-            }),
-        });
-
-        const responseText = await response.text();
-        console.log(`Evolution API response (${response.status}):`, responseText);
-
-        if (!response.ok) {
-            return { success: false, error: `HTTP ${response.status}: ${responseText}` };
-        }
-
-        return { success: true };
-    } catch (error) {
-        console.error('Evolution API send error:', error);
-        return { success: false, error: String(error) };
-    }
-}
-
 serve(async (req: Request) => {
+    const corsHeaders = getCorsHeaders(req);
+
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
@@ -123,10 +72,7 @@ serve(async (req: Request) => {
         console.log('Received notification payload:', payload);
 
         // Admin client for querying profiles without RLS
-        const supabaseAdmin = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-        );
+        const supabaseAdmin = createAdminClient();
 
         // Fetch relevant profiles
         const profileIds = [payload.author_id, payload.tutor_id].filter(Boolean) as string[];
@@ -137,10 +83,7 @@ serve(async (req: Request) => {
 
         if (profileError) {
             console.error('Error fetching profiles:', profileError);
-            return new Response(JSON.stringify({ error: 'Failed to fetch profiles' }), {
-                status: 500,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
+            return errorResponse(corsHeaders, 500, 'Failed to fetch profiles');
         }
 
         const author = profiles?.find((p) => p.id === payload.author_id);
@@ -246,15 +189,9 @@ serve(async (req: Request) => {
 
         console.log('Notification results:', results);
 
-        return new Response(JSON.stringify({ success: true, results }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return jsonResponse({ success: true, results }, 200, corsHeaders);
     } catch (error) {
         console.error('Send WhatsApp error:', error);
-        return new Response(JSON.stringify({ error: 'Internal server error' }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return errorResponse(corsHeaders, 500, 'Internal server error');
     }
 });

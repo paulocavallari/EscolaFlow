@@ -14,12 +14,14 @@ import {
     ScrollView,
     Platform,
 } from 'react-native';
+import { MagnifyingGlass, DownloadSimple, Plus, Trash, CaretRight } from 'phosphor-react-native';
 import { useStudentsList, useCreateStudent, useUpdateStudent, useDeleteStudent, useClassesList, useTutorsList } from '../../../src/hooks/useStudents';
 import { CSVImporter } from '../../../src/components/CSVImporter';
 import { Student, StudentWithRelations } from '../../../src/types/database';
-import { COLORS } from '../../../src/lib/constants';
+import { useTheme, typography } from '../../../src/lib/theme';
 
 export default function StudentsScreen() {
+    const { colors } = useTheme();
     const { data: students, isLoading } = useStudentsList();
     const { data: classes } = useClassesList();
     const { data: tutors } = useTutorsList();
@@ -136,48 +138,52 @@ export default function StudentsScreen() {
 
     const renderStudent = ({ item }: { item: StudentWithRelations }) => (
         <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
             onPress={() => openEdit(item)}
             activeOpacity={0.7}
         >
-            <View style={styles.cardAvatar}>
-                <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+            <View style={[styles.cardAvatar, { backgroundColor: colors.secondaryContainer }]}>
+                <Text style={[styles.avatarText, { color: colors.onSecondaryContainer }]}>{item.name.charAt(0)}</Text>
             </View>
             <View style={styles.cardContent}>
-                <Text style={styles.cardName}>{item.name}</Text>
-                <Text style={styles.cardSub}>
+                <Text style={[styles.cardName, { color: colors.onSurface }]}>{item.name}</Text>
+                <Text style={[styles.cardSub, { color: colors.onSurfaceVariant }]}>
                     {item.class?.name ?? 'Sem turma'} • {item.matricula ?? 'Sem RA'}
                     {item.guardian_phone ? ` • WhatsApp Pai: ${item.guardian_phone}` : ''}
                 </Text>
                 {item.tutor && (
-                    <Text style={styles.cardTutor}>Tutor: {item.tutor.full_name}</Text>
+                    <Text style={[styles.cardTutor, { color: colors.primary }]}>Tutor: {item.tutor.full_name}</Text>
                 )}
             </View>
         </TouchableOpacity>
     );
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Header Actions */}
             <View style={styles.headerActions}>
-                <TextInput
-                    style={styles.searchInput}
-                    value={search}
-                    onChangeText={setSearch}
-                    placeholder="Buscar aluno..."
-                    placeholderTextColor={COLORS.textMuted}
-                />
+                <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.outline }]}>
+                    <MagnifyingGlass size={18} color={colors.onSurfaceVariant} />
+                    <TextInput
+                        style={[styles.searchInput, { color: colors.onSurface }]}
+                        value={search}
+                        onChangeText={setSearch}
+                        placeholder="Buscar aluno..."
+                        placeholderTextColor={colors.onSurfaceVariant}
+                    />
+                </View>
                 <TouchableOpacity
-                    style={styles.csvButton}
+                    style={[styles.csvButton, { backgroundColor: colors.secondary }]}
                     onPress={() => setShowCSV(!showCSV)}
                 >
-                    <Text style={styles.csvButtonText}>📥 CSV</Text>
+                    <DownloadSimple size={18} color={colors.onSecondary} weight="bold" />
+                    <Text style={[styles.csvButtonText, { color: colors.onSecondary }]}>CSV</Text>
                 </TouchableOpacity>
             </View>
 
             {/* CSV Importer (toggleable) */}
             {showCSV && (
-                <View style={styles.csvContainer}>
+                <View style={[styles.csvContainer, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
                     <CSVImporter />
                 </View>
             )}
@@ -188,13 +194,13 @@ export default function StudentsScreen() {
                 renderItem={renderStudent}
                 contentContainerStyle={styles.listContent}
                 ListEmptyComponent={
-                    <Text style={styles.emptyText}>Nenhum aluno encontrado.</Text>
+                    <Text style={[styles.emptyText, { color: colors.onSurfaceVariant }]}>Nenhum aluno encontrado.</Text>
                 }
             />
 
             {/* FAB */}
-            <TouchableOpacity style={styles.fab} onPress={openCreate} activeOpacity={0.8}>
-                <Text style={styles.fabText}>+</Text>
+            <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={openCreate} activeOpacity={0.8}>
+                <Plus size={24} color={colors.onPrimary} weight="bold" />
             </TouchableOpacity>
 
             {/* Create/Edit Modal */}
@@ -204,63 +210,65 @@ export default function StudentsScreen() {
                 presentationStyle="pageSheet"
                 onRequestClose={() => setShowModal(false)}
             >
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalHeader}>
+                <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+                    <View style={[styles.modalHeader, { borderBottomColor: colors.outlineVariant }]}>
                         <TouchableOpacity onPress={() => setShowModal(false)}>
-                            <Text style={styles.modalClose}>Cancelar</Text>
+                            <Text style={[styles.modalClose, { color: colors.onSurfaceVariant }]}>Cancelar</Text>
                         </TouchableOpacity>
-                        <Text style={styles.modalTitle}>
+                        <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
                             {editingStudent ? 'Editar Aluno' : 'Novo Aluno'}
                         </Text>
                         <TouchableOpacity onPress={handleSave}>
-                            <Text style={styles.modalSave}>Salvar</Text>
+                            <Text style={[styles.modalSave, { color: colors.primary }]}>Salvar</Text>
                         </TouchableOpacity>
                     </View>
 
                     <ScrollView style={styles.modalContent}>
-                        <Text style={styles.fieldLabel}>Nome</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.onSurfaceVariant }]}>Nome</Text>
                         <TextInput
-                            style={styles.fieldInput}
+                            style={[styles.fieldInput, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outline }]}
                             value={name}
                             onChangeText={setName}
                             placeholder="Nome completo"
-                            placeholderTextColor={COLORS.textMuted}
+                            placeholderTextColor={colors.onSurfaceVariant}
                         />
 
-                        <Text style={styles.fieldLabel}>Matrícula</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.onSurfaceVariant }]}>Matrícula</Text>
                         <TextInput
-                            style={styles.fieldInput}
+                            style={[styles.fieldInput, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outline }]}
                             value={matricula}
                             onChangeText={setMatricula}
                             placeholder="Código de matrícula"
-                            placeholderTextColor={COLORS.textMuted}
+                            placeholderTextColor={colors.onSurfaceVariant}
                         />
 
-                        <Text style={styles.fieldLabel}>WhatsApp Responsável (Notificação)</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.onSurfaceVariant }]}>WhatsApp Responsável (Notificação)</Text>
                         <TextInput
-                            style={styles.fieldInput}
+                            style={[styles.fieldInput, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outline }]}
                             value={guardianPhone}
                             onChangeText={setGuardianPhone}
                             placeholder="5511999999999 (Código DDD)"
-                            placeholderTextColor={COLORS.textMuted}
+                            placeholderTextColor={colors.onSurfaceVariant}
                             keyboardType="phone-pad"
                         />
 
-                        <Text style={styles.fieldLabel}>Turma</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.onSurfaceVariant }]}>Turma</Text>
                         <View style={styles.selector}>
                             {classes?.map((cls) => (
                                 <TouchableOpacity
                                     key={cls.id}
                                     style={[
                                         styles.selectorOption,
-                                        selectedClassId === cls.id && styles.selectorOptionActive,
+                                        { backgroundColor: colors.surface, borderColor: colors.outline },
+                                        selectedClassId === cls.id && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
                                     ]}
                                     onPress={() => setSelectedClassId(cls.id)}
                                 >
                                     <Text
                                         style={[
                                             styles.selectorText,
-                                            selectedClassId === cls.id && styles.selectorTextActive,
+                                            { color: colors.onSurfaceVariant },
+                                            selectedClassId === cls.id && { color: colors.primary },
                                         ]}
                                     >
                                         {cls.name}
@@ -269,19 +277,21 @@ export default function StudentsScreen() {
                             ))}
                         </View>
 
-                        <Text style={styles.fieldLabel}>Tutor</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.onSurfaceVariant }]}>Tutor</Text>
                         <View style={styles.selector}>
                             <TouchableOpacity
                                 style={[
                                     styles.selectorOption,
-                                    !selectedTutorId && styles.selectorOptionActive,
+                                    { backgroundColor: colors.surface, borderColor: colors.outline },
+                                    !selectedTutorId && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
                                 ]}
                                 onPress={() => setSelectedTutorId('')}
                             >
                                 <Text
                                     style={[
                                         styles.selectorText,
-                                        !selectedTutorId && styles.selectorTextActive,
+                                        { color: colors.onSurfaceVariant },
+                                        !selectedTutorId && { color: colors.primary },
                                     ]}
                                 >
                                     Sem tutor
@@ -292,14 +302,16 @@ export default function StudentsScreen() {
                                     key={tutor.id}
                                     style={[
                                         styles.selectorOption,
-                                        selectedTutorId === tutor.id && styles.selectorOptionActive,
+                                        { backgroundColor: colors.surface, borderColor: colors.outline },
+                                        selectedTutorId === tutor.id && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
                                     ]}
                                     onPress={() => setSelectedTutorId(tutor.id)}
                                 >
                                     <Text
                                         style={[
                                             styles.selectorText,
-                                            selectedTutorId === tutor.id && styles.selectorTextActive,
+                                            { color: colors.onSurfaceVariant },
+                                            selectedTutorId === tutor.id && { color: colors.primary },
                                         ]}
                                     >
                                         {tutor.full_name}
@@ -310,10 +322,11 @@ export default function StudentsScreen() {
 
                         {editingStudent && (
                             <TouchableOpacity
-                                style={styles.deleteButton}
+                                style={[styles.deleteButton, { backgroundColor: colors.errorContainer }]}
                                 onPress={handleDelete}
                             >
-                                <Text style={styles.deleteButtonText}>🗑️ Desativar Aluno</Text>
+                                <Trash size={18} color={colors.onErrorContainer} weight="bold" />
+                                <Text style={[styles.deleteButtonText, { color: colors.onErrorContainer }]}>Desativar Aluno</Text>
                             </TouchableOpacity>
                         )}
                     </ScrollView>
@@ -324,68 +337,67 @@ export default function StudentsScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    container: { flex: 1 },
     headerActions: {
         flexDirection: 'row',
         padding: 16,
         gap: 8,
     },
+    searchContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 12,
+        paddingHorizontal: 14,
+        borderWidth: 1,
+        gap: 8,
+    },
     searchInput: {
         flex: 1,
-        backgroundColor: COLORS.surface,
-        borderRadius: 12,
-        paddingHorizontal: 16,
         paddingVertical: 12,
-        fontSize: 15,
-        color: COLORS.textPrimary,
-        borderWidth: 1,
-        borderColor: COLORS.border + '40',
+        ...typography.bodyMedium,
     },
     csvButton: {
-        backgroundColor: COLORS.secondary,
         borderRadius: 12,
         paddingHorizontal: 16,
         justifyContent: 'center',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
     },
-    csvButtonText: { fontSize: 14, fontWeight: '600', color: COLORS.white },
+    csvButtonText: { ...typography.labelLarge, fontWeight: '600' },
     csvContainer: {
         marginHorizontal: 16,
-        backgroundColor: COLORS.surface,
         borderRadius: 16,
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: COLORS.border + '30',
     },
     listContent: { padding: 16, paddingTop: 0, paddingBottom: 100 },
     card: {
-        backgroundColor: COLORS.surface,
         borderRadius: 14,
         padding: 14,
         flexDirection: 'row',
         alignItems: 'center',
         marginBottom: 8,
         borderWidth: 1,
-        borderColor: COLORS.border + '20',
     },
     cardAvatar: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: COLORS.accent + '20',
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 12,
     },
-    avatarText: { fontSize: 16, fontWeight: '700', color: COLORS.accent },
+    avatarText: { ...typography.titleMedium, fontWeight: '700' },
     cardContent: { flex: 1 },
-    cardName: { fontSize: 15, fontWeight: '600', color: COLORS.textPrimary },
-    cardSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-    cardTutor: { fontSize: 11, color: COLORS.primary, marginTop: 2, fontWeight: '500' },
+    cardName: { ...typography.bodyLarge, fontWeight: '600' },
+    cardSub: { ...typography.bodySmall, marginTop: 2 },
+    cardTutor: { ...typography.labelSmall, marginTop: 2, fontWeight: '500' },
     emptyText: {
         textAlign: 'center',
-        color: COLORS.textSecondary,
         marginTop: 40,
-        fontSize: 15,
+        ...typography.bodyMedium,
     },
     fab: {
         position: 'absolute',
@@ -394,63 +406,55 @@ const styles = StyleSheet.create({
         width: 56,
         height: 56,
         borderRadius: 28,
-        backgroundColor: COLORS.primary,
         alignItems: 'center',
         justifyContent: 'center',
         elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
     },
-    fabText: { fontSize: 28, color: COLORS.white, fontWeight: '300', marginTop: -2 },
-    modalContainer: { flex: 1, backgroundColor: COLORS.background },
+    modalContainer: { flex: 1 },
     modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
     },
-    modalClose: { fontSize: 15, color: COLORS.textSecondary },
-    modalTitle: { fontSize: 17, fontWeight: '700', color: COLORS.textPrimary },
-    modalSave: { fontSize: 15, fontWeight: '600', color: COLORS.primary },
+    modalClose: { ...typography.bodyMedium },
+    modalTitle: { ...typography.titleMedium, fontWeight: '700' },
+    modalSave: { ...typography.bodyMedium, fontWeight: '600' },
     modalContent: { padding: 20 },
     fieldLabel: {
-        fontSize: 14,
+        ...typography.labelLarge,
         fontWeight: '600',
-        color: COLORS.textSecondary,
         marginBottom: 6,
         marginTop: 16,
     },
     fieldInput: {
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         paddingHorizontal: 16,
         paddingVertical: 12,
-        fontSize: 15,
-        color: COLORS.textPrimary,
+        ...typography.bodyMedium,
         borderWidth: 1,
-        borderColor: COLORS.border + '40',
     },
     selector: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
     selectorOption: {
         paddingVertical: 8,
         paddingHorizontal: 14,
         borderRadius: 10,
-        backgroundColor: COLORS.surface,
         borderWidth: 1,
-        borderColor: COLORS.border + '40',
     },
-    selectorOptionActive: {
-        borderColor: COLORS.primary,
-        backgroundColor: COLORS.primary + '10',
-    },
-    selectorText: { fontSize: 13, color: COLORS.textSecondary, fontWeight: '500' },
-    selectorTextActive: { color: COLORS.primary },
+    selectorText: { ...typography.bodySmall, fontWeight: '500' },
     deleteButton: {
         marginTop: 32,
         paddingVertical: 14,
         borderRadius: 12,
-        backgroundColor: COLORS.error + '15',
         alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 8,
     },
-    deleteButtonText: { fontSize: 15, fontWeight: '600', color: COLORS.error },
+    deleteButtonText: { ...typography.bodyMedium, fontWeight: '600' },
 });

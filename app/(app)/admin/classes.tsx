@@ -13,11 +13,13 @@ import {
     Modal,
     Platform,
 } from 'react-native';
+import { Buildings, Plus, Trash, CaretRight } from 'phosphor-react-native';
 import { useClassesList, useCreateClass, useUpdateClass, useDeleteClass } from '../../../src/hooks/useStudents';
 import { Class } from '../../../src/types/database';
-import { COLORS } from '../../../src/lib/constants';
+import { useTheme, typography } from '../../../src/lib/theme';
 
 export default function ClassesScreen() {
+    const { colors } = useTheme();
     const { data: classes, isLoading } = useClassesList();
     const createClass = useCreateClass();
     const updateClass = useUpdateClass();
@@ -112,36 +114,40 @@ export default function ClassesScreen() {
 
     const renderClass = ({ item }: { item: Class }) => (
         <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
             onPress={() => openEdit(item)}
             activeOpacity={0.7}
         >
-            <View style={styles.cardIcon}>
-                <Text style={styles.iconText}>🏫</Text>
+            <View style={[styles.cardIcon, { backgroundColor: colors.secondaryContainer }]}>
+                <Buildings size={22} color={colors.onSecondaryContainer} weight="duotone" />
             </View>
             <View style={styles.cardContent}>
-                <Text style={styles.cardTitle}>{item.name}</Text>
-                <Text style={styles.cardSubtitle}>Ano: {item.year}</Text>
+                <Text style={[styles.cardTitle, { color: colors.onSurface }]}>{item.name}</Text>
+                <Text style={[styles.cardSubtitle, { color: colors.onSurfaceVariant }]}>Ano: {item.year}</Text>
             </View>
-            <Text style={styles.editArrow}>›</Text>
+            <CaretRight size={20} color={colors.onSurfaceVariant} />
         </TouchableOpacity>
     );
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             <FlatList
                 data={classes}
                 keyExtractor={(item) => item.id}
                 renderItem={renderClass}
                 contentContainerStyle={styles.listContent}
                 ListEmptyComponent={
-                    <Text style={styles.emptyText}>Nenhuma turma cadastrada.</Text>
+                    <Text style={[styles.emptyText, { color: colors.onSurfaceVariant }]}>Nenhuma turma cadastrada.</Text>
                 }
             />
 
             {/* FAB */}
-            <TouchableOpacity style={styles.fab} onPress={openCreate} activeOpacity={0.8}>
-                <Text style={styles.fabText}>+</Text>
+            <TouchableOpacity
+                style={[styles.fab, { backgroundColor: colors.primary }]}
+                onPress={openCreate}
+                activeOpacity={0.8}
+            >
+                <Plus size={24} color={colors.onPrimary} weight="bold" />
             </TouchableOpacity>
 
             {/* Create/Edit Modal */}
@@ -151,45 +157,46 @@ export default function ClassesScreen() {
                 presentationStyle="pageSheet"
                 onRequestClose={() => setShowModal(false)}
             >
-                <View style={styles.modalContainer}>
-                    <View style={styles.modalHeader}>
+                <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+                    <View style={[styles.modalHeader, { borderBottomColor: colors.outlineVariant }]}>
                         <TouchableOpacity onPress={() => setShowModal(false)}>
-                            <Text style={styles.modalClose}>Cancelar</Text>
+                            <Text style={[styles.modalClose, { color: colors.onSurfaceVariant }]}>Cancelar</Text>
                         </TouchableOpacity>
-                        <Text style={styles.modalTitle}>
+                        <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
                             {editingClass ? 'Editar Turma' : 'Nova Turma'}
                         </Text>
                         <TouchableOpacity onPress={handleSave}>
-                            <Text style={styles.modalSave}>Salvar</Text>
+                            <Text style={[styles.modalSave, { color: colors.primary }]}>Salvar</Text>
                         </TouchableOpacity>
                     </View>
 
                     <View style={styles.modalContent}>
-                        <Text style={styles.fieldLabel}>Nome da Turma</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.onSurfaceVariant }]}>Nome da Turma</Text>
                         <TextInput
-                            style={styles.fieldInput}
+                            style={[styles.fieldInput, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outline }]}
                             value={className}
                             onChangeText={setClassName}
                             placeholder="Ex: 3º Ano A"
-                            placeholderTextColor={COLORS.textMuted}
+                            placeholderTextColor={colors.onSurfaceVariant}
                         />
 
-                        <Text style={styles.fieldLabel}>Ano Letivo</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.onSurfaceVariant }]}>Ano Letivo</Text>
                         <TextInput
-                            style={styles.fieldInput}
+                            style={[styles.fieldInput, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outline }]}
                             value={classYear}
                             onChangeText={setClassYear}
                             placeholder="2026"
-                            placeholderTextColor={COLORS.textMuted}
+                            placeholderTextColor={colors.onSurfaceVariant}
                             keyboardType="numeric"
                         />
 
                         {editingClass && (
                             <TouchableOpacity
-                                style={styles.deleteButton}
+                                style={[styles.deleteButton, { backgroundColor: colors.errorContainer }]}
                                 onPress={handleDelete}
                             >
-                                <Text style={styles.deleteButtonText}>🗑️ Desativar Turma</Text>
+                                <Trash size={18} color={colors.onErrorContainer} weight="bold" />
+                                <Text style={[styles.deleteButtonText, { color: colors.onErrorContainer }]}>Desativar Turma</Text>
                             </TouchableOpacity>
                         )}
                     </View>
@@ -200,37 +207,31 @@ export default function ClassesScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    container: { flex: 1 },
     listContent: { padding: 16, paddingBottom: 100 },
     card: {
-        backgroundColor: COLORS.surface,
         borderRadius: 14,
         padding: 16,
         flexDirection: 'row',
         alignItems: 'center',
         marginBottom: 8,
         borderWidth: 1,
-        borderColor: COLORS.border + '20',
     },
     cardIcon: {
         width: 44,
         height: 44,
         borderRadius: 12,
-        backgroundColor: COLORS.secondary + '15',
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 14,
     },
-    iconText: { fontSize: 22 },
     cardContent: { flex: 1 },
-    cardTitle: { fontSize: 16, fontWeight: '600', color: COLORS.textPrimary },
-    cardSubtitle: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
-    editArrow: { fontSize: 22, color: COLORS.textMuted, fontWeight: '300' },
+    cardTitle: { ...typography.titleMedium, fontWeight: '600' },
+    cardSubtitle: { ...typography.bodySmall, marginTop: 2 },
     emptyText: {
         textAlign: 'center',
-        color: COLORS.textSecondary,
         marginTop: 40,
-        fontSize: 15,
+        ...typography.bodyMedium,
     },
     fab: {
         position: 'absolute',
@@ -239,52 +240,47 @@ const styles = StyleSheet.create({
         width: 56,
         height: 56,
         borderRadius: 28,
-        backgroundColor: COLORS.primary,
         alignItems: 'center',
         justifyContent: 'center',
         elevation: 8,
-        shadowColor: COLORS.primary,
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
+        shadowOpacity: 0.3,
         shadowRadius: 12,
     },
-    fabText: { fontSize: 28, color: COLORS.white, fontWeight: '300', marginTop: -2 },
-    modalContainer: { flex: 1, backgroundColor: COLORS.background },
+    modalContainer: { flex: 1 },
     modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: COLORS.border,
     },
-    modalClose: { fontSize: 15, color: COLORS.textSecondary },
-    modalTitle: { fontSize: 17, fontWeight: '700', color: COLORS.textPrimary },
-    modalSave: { fontSize: 15, fontWeight: '600', color: COLORS.primary },
+    modalClose: { ...typography.bodyMedium },
+    modalTitle: { ...typography.titleMedium, fontWeight: '700' },
+    modalSave: { ...typography.bodyMedium, fontWeight: '600' },
     modalContent: { padding: 20 },
     fieldLabel: {
-        fontSize: 14,
+        ...typography.labelLarge,
         fontWeight: '600',
-        color: COLORS.textSecondary,
         marginBottom: 6,
         marginTop: 16,
     },
     fieldInput: {
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         paddingHorizontal: 16,
         paddingVertical: 12,
-        fontSize: 15,
-        color: COLORS.textPrimary,
+        ...typography.bodyMedium,
         borderWidth: 1,
-        borderColor: COLORS.border + '40',
     },
     deleteButton: {
         marginTop: 32,
         paddingVertical: 14,
         borderRadius: 12,
-        backgroundColor: COLORS.error + '15',
         alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 8,
     },
-    deleteButtonText: { fontSize: 15, fontWeight: '600', color: COLORS.error },
+    deleteButtonText: { ...typography.bodyMedium, fontWeight: '600' },
 });

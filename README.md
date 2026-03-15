@@ -193,8 +193,35 @@ npm run web        # Navegador
 | `npm run ios` | Abre no simulador iOS |
 | `npm run android` | Abre no emulador Android |
 | `npm run web` | Abre no navegador |
+| `npm run smoke:all` | Executa smoke test completo (build, auth, RBAC e funções Edge) |
 | `bash scripts/deploy-process-audio.sh` | Faz deploy da função de transcrição |
 | `npx ts-node scripts/create_admin.ts` | Cria usuário admin via script |
+
+### Smoke test completo
+
+Defina credenciais de teste antes de rodar:
+
+```bash
+# Exemplo (PowerShell)
+$env:SMOKE_ADMIN_EMAIL="admin@vc.com.br"
+$env:SMOKE_ADMIN_PASSWORD="sua_senha_admin"
+$env:SMOKE_PROF_EMAIL="prof1@vc.com.br"
+$env:SMOKE_PROF_PASSWORD="sua_senha_professor"
+
+npm run smoke:all
+```
+
+O script `scripts/smoke-all.mjs` valida:
+
+- TypeScript compile (`npx tsc --noEmit`)
+- Build web (`npx expo export --platform web`)
+- Login admin e professor
+- `process-text` autenticado para ambos
+- RBAC (professor bloqueado em funções admin)
+- Fluxo admin (`admin-create-user`, `admin-update-user`, `admin-delete-user`)
+- `delete-occurrence` e `import-csv` para admin
+- Endpoints autenticados adicionais (`send-whatsapp-manual`, `categorize-occurrence`)
+- Cleanup automático de usuários temporários criados no teste
 
 ---
 

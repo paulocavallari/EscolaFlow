@@ -3,16 +3,18 @@
 
 import React from 'react';
 import { Stack } from 'expo-router';
-import { COLORS } from '../../../src/lib/constants';
+import { useTheme } from '../../../src/lib/theme';
 
 export default function OccurrencesLayout() {
+    const { colors } = useTheme();
+
     return (
         <Stack
             screenOptions={{
-                headerStyle: { backgroundColor: COLORS.background },
-                headerTintColor: COLORS.textPrimary,
+                headerStyle: { backgroundColor: colors.surface },
+                headerTintColor: colors.onSurface,
                 headerTitleStyle: { fontWeight: '700' },
-                contentStyle: { backgroundColor: COLORS.background },
+                contentStyle: { backgroundColor: colors.background },
             }}
         >
             <Stack.Screen

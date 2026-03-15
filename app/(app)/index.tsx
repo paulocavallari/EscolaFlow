@@ -13,13 +13,26 @@ import {
     Platform,
 } from 'react-native';
 import { router } from 'expo-router';
+import {
+    SignOut,
+    Clock,
+    TrendUp,
+    CheckCircle,
+    Microphone,
+    ClipboardText,
+    GearSix,
+    Sun,
+    Moon,
+} from 'phosphor-react-native';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useOccurrencesList, useOccurrenceStats } from '../../src/hooks/useOccurrences';
-import { OccurrenceStatus, UserRole } from '../../src/types/database';
-import { COLORS, ROLE_LABELS, STATUS_LABELS } from '../../src/lib/constants';
+import { OccurrenceStatus } from '../../src/types/database';
+import { ROLE_LABELS } from '../../src/lib/constants';
+import { useTheme, typography } from '../../src/lib/theme';
 
 export default function DashboardScreen() {
-    const { profile, signOut, isAdmin, isViceDirector, isProfessor } = useAuth();
+    const { profile, signOut, isAdmin, isViceDirector } = useAuth();
+    const { colors, isDark, toggleTheme } = useTheme();
 
     const { data: occurrences, isLoading, refetch } = useOccurrencesList();
     const { data: stats } = useOccurrenceStats();
@@ -63,96 +76,120 @@ export default function DashboardScreen() {
 
     return (
         <ScrollView
-            style={styles.container}
+            style={[styles.container, { backgroundColor: colors.background }]}
             contentContainerStyle={styles.content}
             refreshControl={
                 <RefreshControl
                     refreshing={isLoading}
                     onRefresh={refetch}
-                    tintColor={COLORS.primary}
+                    tintColor={colors.primary}
                 />
             }
         >
             {/* Welcome Card */}
-            <View style={styles.welcomeCard}>
+            <View style={[styles.welcomeCard, { backgroundColor: colors.surface, borderColor: colors.primary + '30' }]}>
                 <View style={styles.welcomeContent}>
-                    <Text style={styles.welcomeGreeting}>Olá,</Text>
-                    <Text style={styles.welcomeName}>{profile?.full_name ?? 'Usuário'}</Text>
-                    <View style={styles.roleBadge}>
-                        <Text style={styles.roleText}>
+                    <Text style={[styles.welcomeGreeting, { color: colors.onSurfaceVariant }]}>Olá,</Text>
+                    <Text style={[styles.welcomeName, { color: colors.onSurface }]}>{profile?.full_name ?? 'Usuário'}</Text>
+                    <View style={[styles.roleBadge, { backgroundColor: colors.primaryContainer }]}>
+                        <Text style={[styles.roleText, { color: colors.onPrimaryContainer }]}>
                             {profile?.role ? ROLE_LABELS[profile.role] : ''}
                         </Text>
                     </View>
                 </View>
-                <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
-                    <Text style={styles.logoutIcon}>🚪</Text>
-                    <Text style={styles.logoutText}>Sair</Text>
-                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                    <TouchableOpacity
+                        style={[styles.iconBtn, { backgroundColor: colors.surfaceContainerHigh }]}
+                        onPress={toggleTheme}
+                    >
+                        {isDark
+                            ? <Sun size={20} color={colors.warning} weight="bold" />
+                            : <Moon size={20} color={colors.primary} weight="bold" />}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.iconBtn, { backgroundColor: colors.errorContainer }]}
+                        onPress={handleSignOut}
+                    >
+                        <SignOut size={20} color={colors.onErrorContainer} weight="bold" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* Quick Stats */}
-            <Text style={styles.sectionTitle}>Resumo</Text>
+            <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>Resumo</Text>
             <View style={styles.statsGrid}>
                 <TouchableOpacity
-                    style={[styles.statCard, { borderLeftColor: COLORS.warning }]}
+                    style={[styles.statCard, { backgroundColor: colors.surface, borderLeftColor: colors.warning }]}
                     onPress={() => router.push({ pathname: '/(app)/occurrences', params: { filter: 'PENDING_TUTOR' } })}
                 >
                     <View style={styles.statLeft}>
-                        <Text style={styles.statIcon}>🕐</Text>
-                        <Text style={styles.statNumber}>{pendingCount}</Text>
+                        <View style={[styles.statIconCircle, { backgroundColor: colors.warningContainer }]}>
+                            <Clock size={20} color={colors.onWarningContainer} weight="bold" />
+                        </View>
+                        <Text style={[styles.statNumber, { color: colors.onSurface }]}>{pendingCount}</Text>
                     </View>
-                    <Text style={styles.statLabel}>Aguardando Tratativa</Text>
+                    <Text style={[styles.statLabel, { color: colors.onSurfaceVariant }]}>Aguardando Tratativa</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={[styles.statCard, { borderLeftColor: COLORS.error }]}
+                    style={[styles.statCard, { backgroundColor: colors.surface, borderLeftColor: colors.error }]}
                     onPress={() => router.push({ pathname: '/(app)/occurrences', params: { filter: 'ESCALATED_VP' } })}
                 >
                     <View style={styles.statLeft}>
-                        <Text style={styles.statIcon}>⬆️</Text>
-                        <Text style={styles.statNumber}>{escalatedCount}</Text>
+                        <View style={[styles.statIconCircle, { backgroundColor: colors.errorContainer }]}>
+                            <TrendUp size={20} color={colors.onErrorContainer} weight="bold" />
+                        </View>
+                        <Text style={[styles.statNumber, { color: colors.onSurface }]}>{escalatedCount}</Text>
                     </View>
-                    <Text style={styles.statLabel}>Encaminhadas à Vice-Direção</Text>
+                    <Text style={[styles.statLabel, { color: colors.onSurfaceVariant }]}>Encaminhadas à Vice-Direção</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={[styles.statCard, { borderLeftColor: COLORS.success }]}
+                    style={[styles.statCard, { backgroundColor: colors.surface, borderLeftColor: colors.success }]}
                     onPress={() => router.push({ pathname: '/(app)/occurrences', params: { filter: 'CONCLUDED' } })}
                 >
                     <View style={styles.statLeft}>
-                        <Text style={styles.statIcon}>✅</Text>
-                        <Text style={styles.statNumber}>{concludedCount}</Text>
+                        <View style={[styles.statIconCircle, { backgroundColor: colors.successContainer }]}>
+                            <CheckCircle size={20} color={colors.onSuccessContainer} weight="bold" />
+                        </View>
+                        <Text style={[styles.statNumber, { color: colors.onSurface }]}>{concludedCount}</Text>
                     </View>
-                    <Text style={styles.statLabel}>Concluídas</Text>
+                    <Text style={[styles.statLabel, { color: colors.onSurfaceVariant }]}>Concluídas</Text>
                 </TouchableOpacity>
             </View>
 
             {/* Quick Actions */}
-            <Text style={styles.sectionTitle}>Ações Rápidas</Text>
+            <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>Ações Rápidas</Text>
             <View style={styles.actionsRow}>
                 <TouchableOpacity
-                    style={[styles.actionButton, { borderColor: COLORS.primary + '50' }]}
+                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.primary + '50' }]}
                     onPress={() => router.push('/(app)/occurrences/create')}
                 >
-                    <Text style={styles.actionIcon}>🎙️</Text>
-                    <Text style={styles.actionLabel}>Nova{'\n'}Ocorrência</Text>
+                    <View style={[styles.actionIconCircle, { backgroundColor: colors.primaryContainer }]}>
+                        <Microphone size={24} color={colors.onPrimaryContainer} weight="duotone" />
+                    </View>
+                    <Text style={[styles.actionLabel, { color: colors.onSurfaceVariant }]}>Nova{'\n'}Ocorrência</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={styles.actionButton}
+                    style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
                     onPress={() => router.push('/(app)/occurrences')}
                 >
-                    <Text style={styles.actionIcon}>📋</Text>
-                    <Text style={styles.actionLabel}>Ver{'\n'}Todas</Text>
+                    <View style={[styles.actionIconCircle, { backgroundColor: colors.secondaryContainer }]}>
+                        <ClipboardText size={24} color={colors.onSecondaryContainer} weight="duotone" />
+                    </View>
+                    <Text style={[styles.actionLabel, { color: colors.onSurfaceVariant }]}>Ver{'\n'}Todas</Text>
                 </TouchableOpacity>
 
                 {isAdmin && (
                     <TouchableOpacity
-                        style={styles.actionButton}
+                        style={[styles.actionButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
                         onPress={() => router.push('/(app)/admin')}
                     >
-                        <Text style={styles.actionIcon}>⚙️</Text>
-                        <Text style={styles.actionLabel}>Administrar</Text>
+                        <View style={[styles.actionIconCircle, { backgroundColor: colors.surfaceContainerHigh }]}>
+                            <GearSix size={24} color={colors.onSurfaceVariant} weight="duotone" />
+                        </View>
+                        <Text style={[styles.actionLabel, { color: colors.onSurfaceVariant }]}>Administrar</Text>
                     </TouchableOpacity>
                 )}
             </View>
@@ -160,37 +197,37 @@ export default function DashboardScreen() {
             {/* VP-specific: Stats by professor */}
             {(isViceDirector || isAdmin) && stats && stats.length > 0 && (
                 <>
-                    <Text style={styles.sectionTitle}>Por Professor</Text>
+                    <Text style={[styles.sectionTitle, { color: colors.onBackground }]}>Por Professor</Text>
                     <View style={styles.legendRow}>
                         <View style={styles.legendItem}>
-                            <View style={[styles.legendDot, { backgroundColor: COLORS.warning }]} />
-                            <Text style={styles.legendLabel}>Pendentes</Text>
+                            <View style={[styles.legendDot, { backgroundColor: colors.warning }]} />
+                            <Text style={[styles.legendLabel, { color: colors.onSurfaceVariant }]}>Pendentes</Text>
                         </View>
                         <View style={styles.legendItem}>
-                            <View style={[styles.legendDot, { backgroundColor: COLORS.error }]} />
-                            <Text style={styles.legendLabel}>Escaladas</Text>
+                            <View style={[styles.legendDot, { backgroundColor: colors.error }]} />
+                            <Text style={[styles.legendLabel, { color: colors.onSurfaceVariant }]}>Escaladas</Text>
                         </View>
                         <View style={styles.legendItem}>
-                            <View style={[styles.legendDot, { backgroundColor: COLORS.success }]} />
-                            <Text style={styles.legendLabel}>Concluídas</Text>
+                            <View style={[styles.legendDot, { backgroundColor: colors.success }]} />
+                            <Text style={[styles.legendLabel, { color: colors.onSurfaceVariant }]}>Concluídas</Text>
                         </View>
                     </View>
                     {stats.map((stat: any) => (
-                        <View key={stat.author_id} style={styles.professorRow}>
-                            <Text style={styles.professorName}>{stat.author_name}</Text>
+                        <View key={stat.author_id} style={[styles.professorRow, { backgroundColor: colors.surface }]}>
+                            <Text style={[styles.professorName, { color: colors.onSurface }]}>{stat.author_name}</Text>
                             <View style={styles.professorStats}>
-                                <View style={[styles.miniStat, { backgroundColor: COLORS.warning + '20' }]}>
-                                    <Text style={[styles.miniStatText, { color: COLORS.warning }]}>
+                                <View style={[styles.miniStat, { backgroundColor: colors.warningContainer }]}>
+                                    <Text style={[styles.miniStatText, { color: colors.onWarningContainer }]}>
                                         {stat.pending}
                                     </Text>
                                 </View>
-                                <View style={[styles.miniStat, { backgroundColor: COLORS.error + '20' }]}>
-                                    <Text style={[styles.miniStatText, { color: COLORS.error }]}>
+                                <View style={[styles.miniStat, { backgroundColor: colors.errorContainer }]}>
+                                    <Text style={[styles.miniStatText, { color: colors.onErrorContainer }]}>
                                         {stat.escalated}
                                     </Text>
                                 </View>
-                                <View style={[styles.miniStat, { backgroundColor: COLORS.success + '20' }]}>
-                                    <Text style={[styles.miniStatText, { color: COLORS.success }]}>
+                                <View style={[styles.miniStat, { backgroundColor: colors.successContainer }]}>
+                                    <Text style={[styles.miniStatText, { color: colors.onSuccessContainer }]}>
                                         {stat.concluded}
                                     </Text>
                                 </View>
@@ -206,14 +243,12 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background,
     },
     content: {
         padding: 20,
         paddingBottom: 40,
     },
     welcomeCard: {
-        backgroundColor: COLORS.surface,
         borderRadius: 20,
         padding: 20,
         flexDirection: 'row',
@@ -221,55 +256,43 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 28,
         borderWidth: 1,
-        borderColor: COLORS.primary + '30',
     },
     welcomeContent: {
         flex: 1,
     },
     welcomeGreeting: {
-        fontSize: 14,
-        color: COLORS.textSecondary,
+        ...typography.bodyMedium,
     },
     welcomeName: {
-        fontSize: 22,
+        ...typography.headlineLarge,
         fontWeight: '800',
-        color: COLORS.textPrimary,
         marginTop: 2,
     },
     roleBadge: {
         marginTop: 8,
-        backgroundColor: COLORS.primary + '20',
         alignSelf: 'flex-start',
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 8,
     },
     roleText: {
-        fontSize: 12,
+        ...typography.labelSmall,
         fontWeight: '600',
-        color: COLORS.primary,
     },
-    logoutButton: {
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 10,
-        backgroundColor: COLORS.surfaceLight,
+    headerActions: {
+        gap: 8,
         alignItems: 'center',
-        minWidth: 56,
     },
-    logoutIcon: {
-        fontSize: 18,
-        marginBottom: 2,
-    },
-    logoutText: {
-        fontSize: 11,
-        color: COLORS.textSecondary,
-        fontWeight: '600',
+    iconBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     sectionTitle: {
-        fontSize: 17,
+        ...typography.titleMedium,
         fontWeight: '700',
-        color: COLORS.textPrimary,
         marginBottom: 12,
     },
     statsGrid: {
@@ -277,7 +300,6 @@ const styles = StyleSheet.create({
         marginBottom: 28,
     },
     statCard: {
-        backgroundColor: COLORS.surface,
         borderRadius: 14,
         padding: 16,
         borderLeftWidth: 4,
@@ -290,17 +312,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 10,
     },
-    statIcon: {
-        fontSize: 22,
+    statIconCircle: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     statNumber: {
         fontSize: 28,
         fontWeight: '800',
-        color: COLORS.textPrimary,
     },
     statLabel: {
-        fontSize: 13,
-        color: COLORS.textSecondary,
+        ...typography.bodySmall,
         flex: 1,
         textAlign: 'right',
         marginLeft: 12,
@@ -312,23 +336,24 @@ const styles = StyleSheet.create({
     },
     actionButton: {
         flex: 1,
-        backgroundColor: COLORS.surface,
         borderRadius: 14,
         padding: 16,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: COLORS.border + '30',
         minHeight: 90,
         justifyContent: 'center',
     },
-    actionIcon: {
-        fontSize: 28,
+    actionIconCircle: {
+        width: 48,
+        height: 48,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
         marginBottom: 8,
     },
     actionLabel: {
-        fontSize: 12,
+        ...typography.labelSmall,
         fontWeight: '600',
-        color: COLORS.textSecondary,
         textAlign: 'center',
     },
     legendRow: {
@@ -347,11 +372,9 @@ const styles = StyleSheet.create({
         borderRadius: 5,
     },
     legendLabel: {
-        fontSize: 12,
-        color: COLORS.textSecondary,
+        ...typography.bodySmall,
     },
     professorRow: {
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         padding: 14,
         flexDirection: 'row',
@@ -360,9 +383,8 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     professorName: {
-        fontSize: 14,
+        ...typography.bodyMedium,
         fontWeight: '600',
-        color: COLORS.textPrimary,
         flex: 1,
     },
     professorStats: {
@@ -377,7 +399,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     miniStatText: {
-        fontSize: 13,
+        ...typography.labelMedium,
         fontWeight: '700',
     },
 });

@@ -1,70 +1,43 @@
 // supabase/functions/process-text/index.ts
-// Edge Function: Text Processing via Google Gemini API
-// Gemini receives a raw text description and rewrites it formally.
+// Edge Function: Text Processing via OpenRouter
+// Receives a raw text description and rewrites it formally using free-tier chat models (tier racing).
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { getCorsHeaders } from '../_shared/cors.ts';
+import { verifyAuth } from '../_shared/auth.ts';
+import { errorResponse, jsonResponse } from '../_shared/errors.ts';
+import { stripThinkTags } from '../_shared/json-safe.ts';
 
 serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // Verify auth
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-
-    // In local development or anon usage, we might not have a full user. 
-    // If authError says "Invalid JWT" or "missing sub claim", it might be the anon key.
-    // Let's just ensure we have an auth header and a valid Supabase project.
-    if (authError && authError.message !== 'Invalid JWT' && authError.message !== 'Auth session missing!' && !authError.message.includes('missing sub claim')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized', details: authError.message }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    const auth = await verifyAuth(req, corsHeaders);
+    if (!auth.ok) return auth.response;
 
     const body = await req.json();
     const textToProcess: string = body.text;
 
     if (!textToProcess || textToProcess.trim().length === 0) {
-      return new Response(JSON.stringify({ error: 'No text data provided' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse(corsHeaders, 400, 'No text data provided');
     }
 
     const openRouterApiKey = Deno.env.get('OPENROUTER_API_KEY');
     if (!openRouterApiKey) {
-      return new Response(JSON.stringify({
-        error: 'OpenRouter API key not configured',
-        details: 'The environment variable OPENROUTER_API_KEY is missing in the Edge Function'
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return errorResponse(
+        corsHeaders,
+        500,
+        'OpenRouter API key not configured',
+        'The environment variable OPENROUTER_API_KEY is missing in the Edge Function'
+      );
     }
 
+    const fnStart = Date.now();
     console.log(`Processing text: length=${textToProcess.length}`);
 
     // ---- Formally rewrite the text with OpenRouter (Nemotron) ----
@@ -81,112 +54,139 @@ Texto original:
 "${textToProcess}"
 `;
 
-    const modelsToTry = [
-      "google/gemma-3-12b-it:free",
-      "google/gemma-3-4b-it:free",
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "qwen/qwen-2.5-coder-32b-instruct:free",
-      "qwen/qwen3-next-80b-a3b-instruct:free",
-      "nvidia/nemotron-mini-4b-instruct:free",
-      "microsoft/phi-3-mini-128k-instruct:free"
+    // ---- Parallel model racing strategy ----
+    // Models are split into tiers. All models within a tier are fired simultaneously;
+    // the first successful response wins (Promise.any), the rest are aborted.
+    // If an entire tier fails, the next tier is tried.
+    // This reduces worst-case latency from ~40s (sequential) to ~6s per tier.
+    const MODEL_TIERS: string[][] = [
+      // Tier 1 — Fast (small active params, quickest inference)
+      // Trinity Mini leads: consistently fastest in production (observed <2s p50)
+      [
+        "arcee-ai/trinity-mini:free",      // 26B MoE / 3B active — fastest observed
+        "google/gemma-3-4b-it:free",       // 4B dense
+        "openai/gpt-oss-20b:free",         // 21B MoE / 3.6B active
+      ],
+      // Tier 2 — Medium (larger but reliable, good Portuguese)
+      [
+        "google/gemma-3-12b-it:free",                    // 12B dense
+        "mistralai/mistral-small-3.1-24b-instruct:free", // 24B dense
+        "google/gemma-3-27b-it:free",                    // 27B dense
+      ],
     ];
+    const TIER_TIMEOUT_MS = 6000; // 6s max per tier
 
-    let rewriteResponse: Response | null = null;
-    let fallbackError: any = null;
-    let usedModel = "";
+    interface RaceResult { model: string; content: string; }
 
-    for (const model of modelsToTry) {
-      console.log(`[OpenRouter] Trying model: ${model}`);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout per model
+    async function raceTier(models: string[], signal?: AbortSignal): Promise<RaceResult> {
+      const tierController = new AbortController();
+      // If parent signals abort, propagate
+      if (signal) signal.addEventListener('abort', () => tierController.abort(), { once: true });
 
-      try {
-        rewriteResponse = await fetch(
-          "https://openrouter.ai/api/v1/chat/completions",
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${openRouterApiKey}`,
-              'Content-Type': 'application/json',
-              'HTTP-Referer': 'https://escolaflow.com.br',
-              'X-Title': 'Ocorrências VC'
-            },
-            body: JSON.stringify({
-              model: model,
-              messages: [
-                {
-                  role: 'user',
-                  content: formalRewritePrompt,
-                },
-              ],
-              temperature: 0.2,
-              max_tokens: 1024,
-            }),
-            signal: controller.signal
-          }
-        );
-        clearTimeout(timeoutId);
+      const modelPromises = models.map(async (model): Promise<RaceResult> => {
+        console.log(`[OpenRouter] Racing: ${model}`);
+        const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openRouterApiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://escolaflow.com.br',
+            'X-Title': 'Ocorrências VC',
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: formalRewritePrompt }],
+            temperature: 0.2,
+            max_tokens: 1024,
+          }),
+          signal: tierController.signal,
+        });
 
-        if (rewriteResponse.ok) {
-          usedModel = model;
-          break; // success, break loop
+        if (!resp.ok) {
+          const errBody = await resp.text().catch(() => '');
+          throw new Error(`${model} HTTP ${resp.status}: ${errBody.slice(0, 100)}`);
         }
 
-        const errBody = await rewriteResponse.text();
-        console.warn(`[OpenRouter] Model ${model} failed (HTTP ${rewriteResponse.status}):`, errBody);
-        fallbackError = errBody;
-      } catch (fetchErr: any) {
-        clearTimeout(timeoutId);
-        const isTimeout = fetchErr.name === 'AbortError';
-        console.error(`[OpenRouter] Exception on model ${model}:`, isTimeout ? 'Timed out after 4s' : fetchErr.message);
-        fallbackError = isTimeout ? 'Timeout' : fetchErr.message;
+        const data = await resp.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (!content) throw new Error(`${model}: empty content`);
+
+        return { model, content };
+      });
+
+      // Timeout rejects if no model responds in time
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          tierController.abort();
+          reject(new Error(`Tier timeout after ${TIER_TIMEOUT_MS}ms`));
+        }, TIER_TIMEOUT_MS);
+      });
+
+      try {
+        // Promise.any: first fulfilled wins; rejects only if ALL reject
+        // Promise.race: whichever settles first (success or timeout)
+        const result = await Promise.race([
+          Promise.any(modelPromises),
+          timeoutPromise,
+        ]);
+        tierController.abort(); // cancel remaining requests
+        return result;
+      } catch (err) {
+        tierController.abort();
+        throw err;
       }
     }
 
-    if (!rewriteResponse || !rewriteResponse.ok) {
-      console.error('All fallback models failed. Last error:', fallbackError);
+    let usedModel = '';
+    let formalText = textToProcess;
+    let tiersAttempted = 0;
+    let lastError: any = null;
 
-      return new Response(JSON.stringify({
+    for (const tier of MODEL_TIERS) {
+      tiersAttempted++;
+      try {
+        console.log(`[OpenRouter] Trying tier ${tiersAttempted} (${tier.length} models in parallel)...`);
+        const result = await raceTier(tier);
+        usedModel = result.model;
+        // Strip <think> tags some models emit
+        formalText = stripThinkTags(result.content);
+        console.log(`[OpenRouter] ✅ Tier ${tiersAttempted} succeeded: ${usedModel}`);
+        break;
+      } catch (tierErr: any) {
+        console.warn(`[OpenRouter] Tier ${tiersAttempted} failed:`, tierErr.message ?? tierErr);
+        lastError = tierErr.message ?? String(tierErr);
+      }
+    }
+
+    const duration = Date.now() - fnStart;
+
+    // All tiers failed — return original text as graceful degradation
+    if (!usedModel) {
+      console.error(`All ${tiersAttempted} tier(s) failed. Last error: ${lastError}`);
+      return jsonResponse({
         original: textToProcess,
         formal: textToProcess,
         error: 'Formalization failed, returning original text instead',
-        details: fallbackError
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+        details: lastError,
+        model_used: null,
+        tiers_attempted: tiersAttempted,
+        duration_ms: duration,
+      }, 200, corsHeaders);
     }
 
-    const rewriteData = await rewriteResponse.json();
-    const messageContent = rewriteData.choices?.[0]?.message?.content;
+    console.log(`Rewritten formal text(${formalText.length} chars) | model: ${usedModel} | tiers: ${tiersAttempted} | ${duration}ms`);
 
-    let formalText = textToProcess; // Fallback to original
-
-    if (messageContent) {
-      formalText = messageContent.replace(/<think>[\s\S]*?<\/think>\n?/g, '').trim();
-    } else {
-      console.warn('OpenRouter rewrite returned no content, using original.', rewriteData);
-    }
-
-    console.log(`Rewritten formal text(${formalText.length} chars) using model: ${usedModel}`);
-    // Success response matching Audio result
-    return new Response(JSON.stringify({
+    return jsonResponse({
       original: textToProcess,
       formal: formalText,
       error: null,
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+      model_used: usedModel,
+      tiers_attempted: tiersAttempted,
+      duration_ms: duration,
+    }, 200, corsHeaders);
 
   } catch (error: any) {
     console.error('Text processing exception:', error);
-    return new Response(JSON.stringify({
-      error: 'Internal processing error',
-      details: error.message || String(error)
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return errorResponse(corsHeaders, 500, 'Internal processing error', error.message || String(error));
   }
 });

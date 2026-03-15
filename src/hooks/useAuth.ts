@@ -13,6 +13,7 @@ export interface AuthState {
     loading: boolean;
     signIn: (email: string, password: string) => Promise<{ error: string | null }>;
     signOut: () => Promise<void>;
+    refreshProfile: () => Promise<void>;
     isAdmin: boolean;
     isViceDirector: boolean;
     isProfessor: boolean;
@@ -121,6 +122,14 @@ export function useAuthProvider(): AuthState {
         setLoading(false);
     }, []);
 
+    const refreshProfile = useCallback(async () => {
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (currentUser) {
+            const p = await fetchProfile(currentUser.id);
+            setProfile(p);
+        }
+    }, [fetchProfile]);
+
     return {
         session,
         user,
@@ -128,6 +137,7 @@ export function useAuthProvider(): AuthState {
         loading,
         signIn,
         signOut,
+        refreshProfile,
         isAdmin: profile?.role === UserRole.ADMIN,
         isViceDirector: profile?.role === UserRole.VICE_DIRECTOR,
         isProfessor: profile?.role === UserRole.PROFESSOR,

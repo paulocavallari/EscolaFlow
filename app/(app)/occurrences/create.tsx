@@ -16,49 +16,73 @@ import {
     KeyboardAvoidingView,
 } from 'react-native';
 import { router } from 'expo-router';
+import {
+    Check,
+    MagnifyingGlass,
+    MapPin,
+    Tag,
+    Microphone,
+    PencilSimple,
+    ClipboardText,
+    ArrowRight,
+    ArrowLeft,
+    ArrowCounterClockwise,
+    CheckCircle,
+    Sparkle,
+} from 'phosphor-react-native';
 import { AudioRecorder } from '../../../src/components/AudioRecorder';
-// import { AIReviewModal } from '../../../src/components/AIReviewModal';
 import { useStudentsList, useClassesList } from '../../../src/hooks/useStudents';
-import { useCreateOccurrence, useProcessText } from '../../../src/hooks/useOccurrences';
+import { useCreateOccurrence } from '../../../src/hooks/useOccurrences';
+import { AIProcessingIndicator } from '../../../src/components/AIProcessingIndicator';
 import { useProfile } from '../../../src/hooks/useProfile';
-import { COLORS } from '../../../src/lib/constants';
-import { Student, StudentWithRelations } from '../../../src/types/database';
+import { COLORS, LOCATION_LABELS, CATEGORY_LABELS, CATEGORY_DEFAULT_DESCRIPTIONS } from '../../../src/lib/constants';
+import { Student, StudentWithRelations, OccurrenceLocation, OccurrenceCategory } from '../../../src/types/database';
 import { sendWhatsAppMessage } from '../../../src/services/whatsappService';
+import { useAITextProcessing } from '../../../src/hooks/useAITextProcessing';
+import { buildTutorCreationNotificationMessage } from '../../../src/services/messageBuilders';
+import { useTheme, typography } from '../../../src/lib/theme';
 
 // Memoized student list item for better performance
 const StudentItem = memo(function StudentItem({
     student,
     isSelected,
     onPress,
+    colors,
 }: {
     student: StudentWithRelations;
     isSelected: boolean;
     onPress: (s: StudentWithRelations) => void;
+    colors: any;
 }) {
     return (
         <TouchableOpacity
-            style={[styles.studentItem, isSelected && styles.studentItemSelected]}
+            style={[
+                styles.studentItem,
+                { backgroundColor: colors.surface, borderColor: colors.outline + '30' },
+                isSelected && { borderColor: colors.primary, backgroundColor: colors.primary + '10' },
+            ]}
             onPress={() => onPress(student)}
         >
             <View style={{ flex: 1 }}>
-                <Text style={styles.studentName}>{student.name}</Text>
-                <Text style={styles.studentMeta}>
+                <Text style={[styles.studentName, { color: colors.onSurface }]}>{student.name}</Text>
+                <Text style={[styles.studentMeta, { color: colors.onSurfaceVariant }]}>
                     {student.class?.name ?? 'Turma não definida'}
                     {student.matricula ? ` · RA: ${student.matricula}` : ''}
                 </Text>
             </View>
-            {isSelected && <Text style={styles.checkMark}>✓</Text>}
+            {isSelected && <Check size={22} color={colors.primary} weight="bold" />}
         </TouchableOpacity>
     );
 });
 
-type Step = 'select_student' | 'record_audio' | 'review_audio';
+type Step = 'select_student' | 'select_location' | 'select_category' | 'record_audio' | 'review_audio';
 
 // Steps displayed in the progress bar
-const STEP_LABELS = ['1. Aluno', '2. Relato', '3. Revisar'];
-const STEP_KEYS: Step[] = ['select_student', 'record_audio'];
+const STEP_LABELS = ['1. Aluno', '2. Local', '3. Categoria', '4. Relato', '5. Revisar'];
+const STEP_KEYS: Step[] = ['select_student', 'select_location', 'select_category', 'record_audio', 'review_audio'];
 
 export default function CreateOccurrenceScreen() {
+    const { colors } = useTheme();
     const { profileId } = useProfile();
 
     const [step, setStep] = useState<Step>('select_student');
@@ -67,6 +91,12 @@ export default function CreateOccurrenceScreen() {
     const [selectedClassId, setSelectedClassId] = useState<string>('');
     const [selectedStudent, setSelectedStudent] = useState<StudentWithRelations | null>(null);
     const [studentSearch, setStudentSearch] = useState('');
+
+    // Location & Category
+    const [selectedLocation, setSelectedLocation] = useState<OccurrenceLocation | null>(null);
+    const [selectedCategory, setSelectedCategory] = useState<OccurrenceCategory | null>(null);
+    const [categorySearch, setCategorySearch] = useState('');
+    const [usePreGenerated, setUsePreGenerated] = useState(false);
 
     // Audio / AI
     const [originalText, setOriginalText] = useState('');
@@ -80,7 +110,7 @@ export default function CreateOccurrenceScreen() {
     // Queries
     const { data: classes } = useClassesList();
     const { data: students } = useStudentsList(selectedClassId || undefined);
-    const processText = useProcessText();
+    const aiText = useAITextProcessing();
     const createOccurrence = useCreateOccurrence();
 
     // Filter students by search
@@ -88,47 +118,81 @@ export default function CreateOccurrenceScreen() {
         s.name.toLowerCase().includes(studentSearch.toLowerCase())
     ) ?? [];
 
+    // Shared handler when AI is unavailable — lets user pick between saving as-is or retrying later
+    const handleAIUnavailable = useCallback(
+        (original: string, onProceed: () => void) => {
+            if (Platform.OS === 'web') {
+                const proceed = window.confirm(
+                    'Não foi possível reescrever o texto com IA no momento.\n\nClique OK para salvar usando o texto original, ou Cancelar para tentar novamente mais tarde.'
+                );
+                if (proceed) onProceed();
+            } else {
+                Alert.alert(
+                    'IA indisponível',
+                    'Não foi possível reescrever o texto com IA no momento. O que deseja fazer?',
+                    [
+                        { text: 'Salvar com texto original', onPress: onProceed },
+                        { text: 'Tentar mais tarde', style: 'cancel' },
+                    ]
+                );
+            }
+        },
+        []
+    );
+
     // Handle live transcription complete
     const handleTranscriptionComplete = useCallback(async (text: string) => {
         if (!text.trim()) return;
-        try {
-            const result = await processText.mutateAsync(text);
-            setOriginalText(result.original);
-            setFormalText(result.formal);
-            setStep('review_audio');
-        } catch (err) {
-            Alert.alert(
-                'Erro no processamento',
-                err instanceof Error
-                    ? err.message
-                    : 'Falha ao processar o texto transcrito. Tente novamente.',
-                [{ text: 'OK' }]
-            );
-        }
-    }, [processText]);
+        await aiText.processTextWithAI(
+            text,
+            (result) => {
+                if (result.aiUnavailable) {
+                    handleAIUnavailable(result.original, () => {
+                        setOriginalText(result.original);
+                        setFormalText(result.original);
+                        setStep('review_audio');
+                    });
+                    return;
+                }
+                setOriginalText(result.original);
+                setFormalText(result.formal);
+                setStep('review_audio');
+            },
+            (err) => {
+                Alert.alert('Erro no processamento', err.message, [{ text: 'OK' }]);
+            }
+        );
+    }, [aiText, handleAIUnavailable]);
 
     const handleTextProcess = async () => {
         if (!manualText.trim()) {
             Alert.alert('Aviso', 'Por favor, descreva os detalhes da ocorrência antes de continuar.');
             return;
         }
-        try {
-            const result = await processText.mutateAsync(manualText);
-            setOriginalText(result.original);
-            setFormalText(result.formal);
-            setStep('review_audio');
-        } catch (err) {
-            Alert.alert(
-                'Erro no processamento',
-                err instanceof Error ? err.message : 'Falha ao processar texto.',
-                [{ text: 'OK' }]
-            );
-        }
+        await aiText.processTextWithAI(
+            manualText,
+            (result) => {
+                if (result.aiUnavailable) {
+                    handleAIUnavailable(result.original, () => {
+                        setOriginalText(result.original);
+                        setFormalText(result.original);
+                        setStep('review_audio');
+                    });
+                    return;
+                }
+                setOriginalText(result.original);
+                setFormalText(result.formal);
+                setStep('review_audio');
+            },
+            (err) => {
+                Alert.alert('Erro no processamento', err.message, [{ text: 'OK' }]);
+            }
+        );
     };
 
     const handleCancelProcessing = useCallback(() => {
-        processText.reset();
-    }, [processText]);
+        aiText.reset();
+    }, [aiText]);
 
     // Handle going back to step 1 — reset audio state too
     const handleBackToStudent = useCallback(() => {
@@ -136,8 +200,12 @@ export default function CreateOccurrenceScreen() {
         setOriginalText('');
         setFormalText('');
         setManualText('');
-        processText.reset();
-    }, [processText]);
+        setSelectedLocation(null);
+        setSelectedCategory(null);
+        setCategorySearch('');
+        setUsePreGenerated(false);
+        aiText.reset();
+    }, [aiText]);
 
     // Handle AI review confirmation
     const handleConfirmText = useCallback(async (editedText: string) => {
@@ -159,16 +227,17 @@ export default function CreateOccurrenceScreen() {
                 tutor_id: selectedStudent.tutor_id,
                 description_original: originalText,
                 description_formal: editedText,
+                location: selectedLocation!,
+                category: selectedCategory!,
             });
 
             // Auto-notify tutor via WhatsApp (fire-and-forget)
             if (selectedStudent.tutor?.whatsapp_number) {
-                const message =
-                    `*Nova Ocorrência Escolar*\n\n` +
-                    `Aluno: ${selectedStudent.name}\n` +
-                    `Turma: ${selectedStudent.class?.name || 'N/A'}\n\n` +
-                    `Resumo: ${editedText}\n\n` +
-                    `Acesse o app Ocorrências VC para mais detalhes e para registrar a tratativa.`;
+                const message = buildTutorCreationNotificationMessage(
+                    selectedStudent.name,
+                    selectedStudent.class?.name || 'N/A',
+                    editedText,
+                );
                 sendWhatsAppMessage(selectedStudent.tutor.whatsapp_number, message)
                     .catch(() => { /* silent — notification failure doesn't block the flow */ });
             }
@@ -184,6 +253,10 @@ export default function CreateOccurrenceScreen() {
                 setFormalText('');
                 setStep('select_student');
                 setSelectedStudent(null);
+                setSelectedLocation(null);
+                setSelectedCategory(null);
+                setCategorySearch('');
+                setUsePreGenerated(false);
 
                 if (viewOccurrence) {
                     router.replace(`/(app)/occurrences/${newOccurrence.id}`);
@@ -198,6 +271,10 @@ export default function CreateOccurrenceScreen() {
                             setFormalText('');
                             setStep('select_student');
                             setSelectedStudent(null);
+                            setSelectedLocation(null);
+                            setSelectedCategory(null);
+                            setCategorySearch('');
+                            setUsePreGenerated(false);
                             router.replace(`/(app)/occurrences/${newOccurrence.id}`);
                         }
                     },
@@ -221,10 +298,10 @@ export default function CreateOccurrenceScreen() {
     }, []);
 
     // Progress bar step index
-    const stepIndex = step === 'select_student' ? 0 : step === 'record_audio' ? 1 : 2;
+    const stepIndex = step === 'select_student' ? 0 : step === 'select_location' ? 1 : step === 'select_category' ? 2 : step === 'record_audio' ? 3 : 4;
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -241,18 +318,19 @@ export default function CreateOccurrenceScreen() {
                                         <View
                                             style={[
                                                 styles.progressDot,
-                                                isActive && styles.progressDotActive,
-                                                isDone && styles.progressDotDone,
+                                                { backgroundColor: colors.surfaceVariant },
+                                                isActive && { backgroundColor: colors.primary },
+                                                isDone && { backgroundColor: colors.success },
                                             ]}
                                         >
-                                            <Text style={styles.progressDotText}>{i + 1}</Text>
+                                            <Text style={[styles.progressDotText, { color: colors.onPrimary }]}>{i + 1}</Text>
                                         </View>
-                                        <Text style={[styles.progressLabel, isActive && styles.progressLabelActive]}>
+                                        <Text style={[styles.progressLabel, { color: colors.onSurfaceVariant }, isActive && { color: colors.primary, fontWeight: '700' }]}>
                                             {label.replace(/^\d+\. /, '')}
                                         </Text>
                                     </View>
                                     {i < STEP_LABELS.length - 1 && (
-                                        <View style={[styles.progressConnector, i < stepIndex && styles.progressConnectorDone]} />
+                                        <View style={[styles.progressConnector, { backgroundColor: colors.surfaceVariant }, i < stepIndex && { backgroundColor: colors.success }]} />
                                     )}
                                 </React.Fragment>
                             );
@@ -262,27 +340,27 @@ export default function CreateOccurrenceScreen() {
                     {/* Step 1: Select Student */}
                     {step === 'select_student' && (
                         <View style={styles.stepContent}>
-                            <Text style={styles.stepTitle}>Selecionar Aluno</Text>
-                            <Text style={styles.stepHint}>Escolha a turma e depois toque no nome do aluno.</Text>
+                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>Selecionar Aluno</Text>
+                            <Text style={[styles.stepHint, { color: colors.onSurfaceVariant }]}>Escolha a turma e depois toque no nome do aluno.</Text>
 
                             {/* Class filter */}
-                            <Text style={styles.fieldLabel}>Filtrar por Turma</Text>
+                            <Text style={[styles.fieldLabel, { color: colors.onSurfaceVariant }]}>Filtrar por Turma</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.classScroll}>
                                 <TouchableOpacity
-                                    style={[styles.classChip, !selectedClassId && styles.classChipActive]}
+                                    style={[styles.classChip, { backgroundColor: colors.surfaceVariant, borderColor: colors.outline + '40' }, !selectedClassId && { backgroundColor: colors.primary, borderColor: colors.primary }]}
                                     onPress={() => setSelectedClassId('')}
                                 >
-                                    <Text style={[styles.classChipText, !selectedClassId && styles.classChipTextActive]}>
+                                    <Text style={[styles.classChipText, { color: colors.onSurfaceVariant }, !selectedClassId && { color: colors.onPrimary }]}>
                                         Todas as Turmas
                                     </Text>
                                 </TouchableOpacity>
                                 {classes?.map((cls) => (
                                     <TouchableOpacity
                                         key={cls.id}
-                                        style={[styles.classChip, selectedClassId === cls.id && styles.classChipActive]}
+                                        style={[styles.classChip, { backgroundColor: colors.surfaceVariant, borderColor: colors.outline + '40' }, selectedClassId === cls.id && { backgroundColor: colors.primary, borderColor: colors.primary }]}
                                         onPress={() => setSelectedClassId(cls.id)}
                                     >
-                                        <Text style={[styles.classChipText, selectedClassId === cls.id && styles.classChipTextActive]}>
+                                        <Text style={[styles.classChipText, { color: colors.onSurfaceVariant }, selectedClassId === cls.id && { color: colors.onPrimary }]}>
                                             {cls.name}
                                         </Text>
                                     </TouchableOpacity>
@@ -290,13 +368,16 @@ export default function CreateOccurrenceScreen() {
                             </ScrollView>
 
                             {/* Search */}
-                            <TextInput
-                                style={styles.searchInput}
-                                value={studentSearch}
-                                onChangeText={setStudentSearch}
-                                placeholder="🔍 Buscar aluno por nome..."
-                                placeholderTextColor={COLORS.textMuted}
-                            />
+                            <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.outline + '40' }]}>
+                                <MagnifyingGlass size={18} color={colors.onSurfaceVariant} />
+                                <TextInput
+                                    style={[styles.searchInput, { color: colors.onSurface }]}
+                                    value={studentSearch}
+                                    onChangeText={setStudentSearch}
+                                    placeholder="Buscar aluno por nome..."
+                                    placeholderTextColor={colors.onSurfaceVariant}
+                                />
+                            </View>
 
                             {/* Student FlatList */}
                             <FlatList
@@ -307,10 +388,11 @@ export default function CreateOccurrenceScreen() {
                                         student={student}
                                         isSelected={selectedStudent?.id === student.id}
                                         onPress={setSelectedStudent}
+                                        colors={colors}
                                     />
                                 )}
                                 ListEmptyComponent={
-                                    <Text style={styles.emptyListText}>
+                                    <Text style={[styles.emptyListText, { color: colors.onSurfaceVariant }]}>
                                         {studentSearch ? 'Nenhum aluno encontrado com esse nome.' : 'Selecione uma turma acima para ver os alunos.'}
                                     </Text>
                                 }
@@ -320,23 +402,146 @@ export default function CreateOccurrenceScreen() {
                             />
 
                             {selectedStudent && (
-                                <View style={styles.selectedBanner}>
-                                    <Text style={styles.selectedBannerText}>
-                                        ✓ Selecionado: <Text style={{ fontWeight: '700' }}>{selectedStudent.name}</Text>
-                                        {selectedStudent.class?.name ? `  ·  ${selectedStudent.class.name}` : ''}
-                                    </Text>
+                                <View style={[styles.selectedBanner, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '40' }]}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                                        <Check size={16} color={colors.primary} weight="bold" />
+                                        <Text style={[styles.selectedBannerText, { color: colors.onSurfaceVariant, marginBottom: 0 }]}>
+                                            Selecionado: <Text style={{ fontWeight: '700' }}>{selectedStudent.name}</Text>
+                                            {selectedStudent.class?.name ? `  ·  ${selectedStudent.class.name}` : ''}
+                                        </Text>
+                                    </View>
                                     <TouchableOpacity
-                                        style={styles.nextButton}
-                                        onPress={() => setStep('record_audio')}
+                                        style={[styles.nextButton, { backgroundColor: colors.primary }]}
+                                        onPress={() => setStep('select_location')}
                                     >
-                                        <Text style={styles.nextButtonText}>Próximo →</Text>
+                                        <Text style={[styles.nextButtonText, { color: colors.onPrimary }]}>Próximo</Text>
+                                        <ArrowRight size={18} color={colors.onPrimary} weight="bold" />
                                     </TouchableOpacity>
                                 </View>
                             )}
                         </View>
                     )}
 
-                    {/* Step 2: Record Audio or Type Text */}
+                    {/* Step 2: Select Location */}
+                    {step === 'select_location' && (
+                        <View style={styles.stepContent}>
+                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>Local da Ocorrência</Text>
+                            <Text style={[styles.stepHint, { color: colors.onSurfaceVariant }]}>Selecione o local onde a ocorrência aconteceu.</Text>
+
+                            <View style={styles.locationGrid}>
+                                {(Object.keys(LOCATION_LABELS) as OccurrenceLocation[]).map((loc) => (
+                                    <TouchableOpacity
+                                        key={loc}
+                                        style={[styles.locationItem, { backgroundColor: colors.surface, borderColor: colors.outline + '40' }, selectedLocation === loc && { borderColor: colors.primary, backgroundColor: colors.primary + '15' }]}
+                                        onPress={() => setSelectedLocation(loc)}
+                                    >
+                                        <Text style={[styles.locationItemText, { color: colors.onSurfaceVariant }, selectedLocation === loc && { color: colors.primary }]}>
+                                            {LOCATION_LABELS[loc]}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+
+                            <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                                <TouchableOpacity
+                                    style={[styles.backButton, { flex: 1, marginTop: 0, backgroundColor: colors.surfaceVariant, borderRadius: 12, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }]}
+                                    onPress={() => { setStep('select_student'); setSelectedLocation(null); }}
+                                >
+                                    <ArrowLeft size={16} color={colors.onSurface} />
+                                    <Text style={[styles.backButtonText, { fontWeight: '600', color: colors.onSurface }]}>Voltar</Text>
+                                </TouchableOpacity>
+
+                                {selectedLocation && (
+                                    <TouchableOpacity
+                                        style={[styles.nextButton, { flex: 1, paddingVertical: 14, backgroundColor: colors.primary }]}
+                                        onPress={() => setStep('select_category')}
+                                    >
+                                        <Text style={[styles.nextButtonText, { color: colors.onPrimary }]}>Próximo</Text>
+                                        <ArrowRight size={16} color={colors.onPrimary} weight="bold" />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Step 3: Select Category */}
+                    {step === 'select_category' && (
+                        <View style={styles.stepContent}>
+                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>Categoria da Ocorrência</Text>
+                            <Text style={[styles.stepHint, { color: colors.onSurfaceVariant }]}>Selecione o tipo de ocorrência registrada.</Text>
+
+                            <View style={[styles.searchContainer, { backgroundColor: colors.surface, borderColor: colors.outline + '40' }]}>
+                                <MagnifyingGlass size={18} color={colors.onSurfaceVariant} />
+                                <TextInput
+                                    style={[styles.searchInput, { color: colors.onSurface }]}
+                                    value={categorySearch}
+                                    onChangeText={setCategorySearch}
+                                    placeholder="Buscar categoria..."
+                                    placeholderTextColor={colors.onSurfaceVariant}
+                                />
+                            </View>
+
+                            <FlatList
+                                data={(Object.keys(CATEGORY_LABELS) as OccurrenceCategory[]).filter((cat) =>
+                                    CATEGORY_LABELS[cat].toLowerCase().includes(categorySearch.toLowerCase())
+                                )}
+                                keyExtractor={(item) => item}
+                                renderItem={({ item: cat, index }) => (
+                                    <TouchableOpacity
+                                        style={[styles.categoryItem, { backgroundColor: colors.surface, borderColor: colors.outline + '30' }, selectedCategory === cat && { borderColor: colors.primary, backgroundColor: colors.primary + '12' }]}
+                                        onPress={() => setSelectedCategory(cat)}
+                                    >
+                                        <Text style={[styles.categoryNumber, { backgroundColor: colors.surfaceVariant, color: colors.onSurfaceVariant }]}>{index + 1}</Text>
+                                        <Text style={[styles.categoryItemText, { color: colors.onSurface }, selectedCategory === cat && { color: colors.primary, fontWeight: '700' }]}>
+                                            {CATEGORY_LABELS[cat]}
+                                        </Text>
+                                        {selectedCategory === cat && <Check size={22} color={colors.primary} weight="bold" />}
+                                    </TouchableOpacity>
+                                )}
+                                keyboardShouldPersistTaps="handled"
+                                style={{ flex: 1, marginTop: 10 }}
+                                contentContainerStyle={{ paddingBottom: 100 }}
+                            />
+
+                            {selectedCategory && (
+                                <View style={[styles.selectedBanner, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '40' }]}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                                        <Check size={16} color={colors.primary} weight="bold" />
+                                        <Text style={[styles.selectedBannerText, { color: colors.onSurfaceVariant, marginBottom: 0 }]}>
+                                            Categoria: <Text style={{ fontWeight: '700' }}>{CATEGORY_LABELS[selectedCategory]}</Text>
+                                        </Text>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                                        <TouchableOpacity
+                                            style={[styles.backButton, { flex: 1, marginTop: 0, backgroundColor: colors.surfaceVariant, borderRadius: 12, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }]}
+                                            onPress={() => { setStep('select_location'); setSelectedCategory(null); setCategorySearch(''); }}
+                                        >
+                                            <ArrowLeft size={16} color={colors.onSurface} />
+                                            <Text style={[styles.backButtonText, { fontWeight: '600', color: colors.onSurface }]}>Voltar</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.nextButton, { flex: 1, paddingVertical: 14, backgroundColor: colors.primary }]}
+                                            onPress={() => {
+                                                if (selectedCategory !== OccurrenceCategory.OUTRO && CATEGORY_DEFAULT_DESCRIPTIONS[selectedCategory]) {
+                                                    setUsePreGenerated(true);
+                                                    setOriginalText(CATEGORY_DEFAULT_DESCRIPTIONS[selectedCategory]!);
+                                                    setFormalText(CATEGORY_DEFAULT_DESCRIPTIONS[selectedCategory]!);
+                                                } else {
+                                                    setUsePreGenerated(false);
+                                                }
+                                                setStep('record_audio');
+                                            }}
+                                        >
+                                            <Text style={[styles.nextButtonText, { color: colors.onPrimary }]}>Próximo</Text>
+                                            <ArrowRight size={16} color={colors.onPrimary} weight="bold" />
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+                        </View>
+                    )}
+
+                    {/* Step 4: Record Audio or Type Text */}
                     {step === 'record_audio' && (
                         <ScrollView
                             style={styles.stepContent}
@@ -344,75 +549,143 @@ export default function CreateOccurrenceScreen() {
                             keyboardShouldPersistTaps="handled"
                             showsVerticalScrollIndicator={false}
                         >
-                            <Text style={styles.stepTitle}>Detalhes da Ocorrência</Text>
-                            <View style={styles.studentSelectedCard}>
-                                <Text style={styles.studentSelectedLabel}>Aluno(a):</Text>
-                                <Text style={styles.studentSelectedName}>{selectedStudent?.name}</Text>
+                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>Detalhes da Ocorrência</Text>
+                            <View style={[styles.studentSelectedCard, { backgroundColor: colors.surface, borderColor: colors.primary + '30' }]}>
+                                <Text style={[styles.studentSelectedLabel, { color: colors.onSurfaceVariant }]}>Aluno(a):</Text>
+                                <Text style={[styles.studentSelectedName, { color: colors.onSurface }]}>{selectedStudent?.name}</Text>
                                 {selectedStudent?.class?.name && (
-                                    <Text style={styles.studentSelectedClass}>{selectedStudent.class.name}</Text>
+                                    <Text style={[styles.studentSelectedClass, { color: colors.onSurfaceVariant }]}>{selectedStudent.class.name}</Text>
+                                )}
+                                {selectedLocation && (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                        <MapPin size={14} color={colors.onSurfaceVariant} />
+                                        <Text style={[styles.studentSelectedClass, { color: colors.onSurfaceVariant, marginTop: 0 }]}>{LOCATION_LABELS[selectedLocation]}</Text>
+                                    </View>
+                                )}
+                                {selectedCategory && (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                        <Tag size={14} color={colors.onSurfaceVariant} />
+                                        <Text style={[styles.studentSelectedClass, { color: colors.onSurfaceVariant, marginTop: 0 }]}>{CATEGORY_LABELS[selectedCategory]}</Text>
+                                    </View>
                                 )}
                             </View>
 
-                            <View style={styles.tabsContainer}>
+                            {/* Pre-generated description for categories 1-27 */}
+                            {usePreGenerated && selectedCategory && selectedCategory !== OccurrenceCategory.OUTRO && (
+                                <View style={[styles.preGeneratedCard, { backgroundColor: colors.surface, borderColor: colors.primary + '30' }]}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                        <ClipboardText size={20} color={colors.primary} weight="bold" />
+                                        <Text style={[styles.preGeneratedTitle, { color: colors.primary }]}>Descrição Pré-gerada</Text>
+                                    </View>
+                                    <Text style={[styles.preGeneratedHint, { color: colors.onSurfaceVariant }]}>
+                                        Uma descrição padrão foi gerada para a categoria selecionada. Você pode usá-la diretamente, editá-la, ou gravar/digitar um novo relato.
+                                    </Text>
+                                    <TextInput
+                                        style={[styles.textInputArea, { backgroundColor: colors.surface, borderColor: colors.outline + '50', color: colors.onSurface }]}
+                                        value={formalText}
+                                        onChangeText={setFormalText}
+                                        multiline
+                                        textAlignVertical="top"
+                                    />
+                                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                                        <TouchableOpacity
+                                            style={[styles.processTextButton, { flex: 1, backgroundColor: colors.success }]}
+                                            onPress={() => setStep('review_audio')}
+                                        >
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                <CheckCircle size={18} color={colors.onPrimary} weight="bold" />
+                                                <Text style={[styles.processTextButtonLabel, { color: colors.onPrimary }]}>Usar este texto</Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.processTextButton, { flex: 1, backgroundColor: colors.surfaceVariant }]}
+                                            onPress={() => {
+                                                setUsePreGenerated(false);
+                                                setOriginalText('');
+                                                setFormalText('');
+                                            }}
+                                        >
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                <Microphone size={18} color={colors.onSurface} />
+                                                <Text style={[styles.processTextButtonLabel, { color: colors.onSurface }]}>Gravar / Digitar novo</Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+
+                            {/* Normal audio/text input (shown when no pre-generated or user chose to write new) */}
+                            {!usePreGenerated && (
+                                <>
+                            <View style={[styles.tabsContainer, { backgroundColor: colors.surface, borderColor: colors.outline + '30' }]}>
                                 <TouchableOpacity
-                                    style={[styles.tabButton, inputMode === 'audio' && styles.tabButtonActive]}
+                                    style={[styles.tabButton, inputMode === 'audio' && { backgroundColor: colors.primary + '20' }]}
                                     onPress={() => setInputMode('audio')}
                                 >
-                                    <Text style={[styles.tabText, inputMode === 'audio' && styles.tabTextActive]}>🎙️ Gravação de Voz</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                        <Microphone size={16} color={inputMode === 'audio' ? colors.primary : colors.onSurfaceVariant} weight={inputMode === 'audio' ? 'bold' : 'regular'} />
+                                        <Text style={[styles.tabText, { color: colors.onSurfaceVariant }, inputMode === 'audio' && { color: colors.primary }]}>Gravação de Voz</Text>
+                                    </View>
                                 </TouchableOpacity>
                                 <TouchableOpacity
-                                    style={[styles.tabButton, inputMode === 'text' && styles.tabButtonActive]}
+                                    style={[styles.tabButton, inputMode === 'text' && { backgroundColor: colors.primary + '20' }]}
                                     onPress={() => setInputMode('text')}
                                 >
-                                    <Text style={[styles.tabText, inputMode === 'text' && styles.tabTextActive]}>✍️ Digitar Texto</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                        <PencilSimple size={16} color={inputMode === 'text' ? colors.primary : colors.onSurfaceVariant} weight={inputMode === 'text' ? 'bold' : 'regular'} />
+                                        <Text style={[styles.tabText, { color: colors.onSurfaceVariant }, inputMode === 'text' && { color: colors.primary }]}>Digitar Texto</Text>
+                                    </View>
                                 </TouchableOpacity>
                             </View>
 
                             {inputMode === 'audio' ? (
                                 <AudioRecorder
                                     onTranscriptionComplete={handleTranscriptionComplete}
-                                    isProcessing={processText.isPending}
+                                    isProcessing={aiText.isPending}
                                     onCancelProcessing={handleCancelProcessing}
                                 />
                             ) : (
                                 <View style={styles.textInputContainer}>
-                                    <Text style={styles.textInputHint}>
+                                    <Text style={[styles.textInputHint, { color: colors.onSurfaceVariant }]}>
                                         Descreva a ocorrência com suas próprias palavras. A IA irá formatar o texto automaticamente.
                                     </Text>
                                     <TextInput
-                                        style={styles.textInputArea}
+                                        style={[styles.textInputArea, { backgroundColor: colors.surface, borderColor: colors.outline + '50', color: colors.onSurface }]}
                                         placeholder="Ex: O aluno João foi pego usando o celular durante a prova de matemática e recusou-se a guardar..."
-                                        placeholderTextColor={COLORS.textMuted}
+                                        placeholderTextColor={colors.onSurfaceVariant}
                                         value={manualText}
                                         onChangeText={setManualText}
                                         multiline
                                         textAlignVertical="top"
                                     />
 
-                                    {processText.isPending ? (
-                                        <View style={styles.processingTextContainer}>
-                                            <ActivityIndicator size="small" color={COLORS.primary} />
-                                            <Text style={styles.processingLabel}>I.A. Reescrevendo relato...</Text>
-                                            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelProcessing}>
-                                                <Text style={styles.cancelText}>Cancelar</Text>
-                                            </TouchableOpacity>
-                                        </View>
+                                    {aiText.isPending ? (
+                                        <AIProcessingIndicator
+                                            label="Formatando relato com I.A."
+                                            onCancel={handleCancelProcessing}
+                                        />
                                     ) : (
                                         <TouchableOpacity
-                                            style={styles.processTextButton}
+                                            style={[styles.processTextButton, { backgroundColor: colors.primary }]}
                                             onPress={handleTextProcess}
                                         >
-                                            <Text style={styles.processTextButtonLabel}>✨ Formatar Relato com I.A.</Text>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                <Sparkle size={18} color={colors.onPrimary} weight="fill" />
+                                                <Text style={[styles.processTextButtonLabel, { color: colors.onPrimary }]}>Formatar Relato com I.A.</Text>
+                                            </View>
                                         </TouchableOpacity>
                                     )}
                                 </View>
                             )}
+                                </>
+                            )}
 
                             <TouchableOpacity
-                                style={styles.backButton}
-                                onPress={handleBackToStudent}
+                                style={[styles.backButton, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }]}
+                                onPress={() => { setStep('select_category'); setUsePreGenerated(false); setOriginalText(''); setFormalText(''); setManualText(''); }}
                             >
-                                <Text style={styles.backButtonText}>← Voltar e trocar aluno</Text>
+                                <ArrowLeft size={16} color={colors.onSurfaceVariant} />
+                                <Text style={[styles.backButtonText, { color: colors.onSurfaceVariant }]}>Voltar e trocar categoria</Text>
                             </TouchableOpacity>
                         </ScrollView>
                     )}
@@ -420,12 +693,12 @@ export default function CreateOccurrenceScreen() {
                     {/* Saving indicator */}
                     {createOccurrence.isPending && (
                         <View style={styles.savingOverlay}>
-                            <ActivityIndicator size="large" color={COLORS.primary} />
-                            <Text style={styles.savingText}>Salvando ocorrência...</Text>
+                            <ActivityIndicator size="large" color={colors.primary} />
+                            <Text style={[styles.savingText, { color: colors.onSurfaceVariant }]}>Salvando ocorrência...</Text>
                         </View>
                     )}
 
-                    {/* Step 3: Review */}
+                    {/* Step 5: Review */}
                     {step === 'review_audio' && (
                         <ScrollView
                             style={styles.stepContent}
@@ -433,19 +706,19 @@ export default function CreateOccurrenceScreen() {
                             keyboardShouldPersistTaps="handled"
                             showsVerticalScrollIndicator={false}
                         >
-                            <Text style={styles.stepTitle}>Revisão da Ocorrência</Text>
-                            <Text style={styles.stepHint}>Edite o texto formal se necessário antes de salvar.</Text>
+                            <Text style={[styles.stepTitle, { color: colors.onSurface }]}>Revisão da Ocorrência</Text>
+                            <Text style={[styles.stepHint, { color: colors.onSurfaceVariant }]}>Edite o texto formal se necessário antes de salvar.</Text>
 
-                            <View style={styles.studentSelectedCard}>
-                                <Text style={styles.studentSelectedLabel}>Original Transcrito:</Text>
-                                <Text style={[styles.studentSelectedName, { fontSize: 14, fontWeight: '400', fontStyle: 'italic', marginTop: 8, color: COLORS.textSecondary }]}>
+                            <View style={[styles.studentSelectedCard, { backgroundColor: colors.surface, borderColor: colors.primary + '30' }]}>
+                                <Text style={[styles.studentSelectedLabel, { color: colors.onSurfaceVariant }]}>Original Transcrito:</Text>
+                                <Text style={[styles.studentSelectedName, { fontSize: 14, fontWeight: '400', fontStyle: 'italic', marginTop: 8, color: colors.onSurfaceVariant }]}>
                                     "{originalText}"
                                 </Text>
                             </View>
 
-                            <Text style={styles.fieldLabel}>Versão Formal (Editável)</Text>
+                            <Text style={[styles.fieldLabel, { color: colors.onSurfaceVariant }]}>Versão Formal (Editável)</Text>
                             <TextInput
-                                style={styles.textInputArea}
+                                style={[styles.textInputArea, { backgroundColor: colors.surface, borderColor: colors.outline + '50', color: colors.onSurface }]}
                                 value={formalText}
                                 onChangeText={setFormalText}
                                 multiline
@@ -454,18 +727,20 @@ export default function CreateOccurrenceScreen() {
 
                             <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
                                 <TouchableOpacity
-                                    style={[styles.backButton, { flex: 1, marginTop: 0, backgroundColor: COLORS.surfaceLight, borderRadius: 12, paddingVertical: 14 }]}
+                                    style={[styles.backButton, { flex: 1, marginTop: 0, backgroundColor: colors.surfaceVariant, borderRadius: 12, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }]}
                                     onPress={handleReRecord}
                                 >
-                                    <Text style={[styles.backButtonText, { fontWeight: '600', color: COLORS.textPrimary }]}>🔄 Regravar</Text>
+                                    <ArrowCounterClockwise size={16} color={colors.onSurface} />
+                                    <Text style={[styles.backButtonText, { fontWeight: '600', color: colors.onSurface }]}>Regravar</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    style={[styles.nextButton, { flex: 1, paddingVertical: 14, backgroundColor: formalText.trim() ? COLORS.primary : COLORS.border }]}
+                                    style={[styles.nextButton, { flex: 1, paddingVertical: 14, backgroundColor: formalText.trim() ? colors.primary : colors.outline }]}
                                     onPress={() => handleConfirmText(formalText)}
                                     disabled={!formalText.trim()}
                                 >
-                                    <Text style={styles.nextButtonText}>✅ Confirmar e Salvar</Text>
+                                    <CheckCircle size={18} color={colors.onPrimary} weight="bold" />
+                                    <Text style={[styles.nextButtonText, { color: colors.onPrimary }]}>Confirmar e Salvar</Text>
                                 </TouchableOpacity>
                             </View>
                         </ScrollView>
@@ -479,7 +754,6 @@ export default function CreateOccurrenceScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background,
     },
     content: {
         flex: 1,
@@ -497,60 +771,38 @@ const styles = StyleSheet.create({
     progressConnector: {
         flex: 1,
         height: 2,
-        backgroundColor: COLORS.surfaceLight,
         marginHorizontal: 6,
         marginBottom: 20,
-    },
-    progressConnectorDone: {
-        backgroundColor: COLORS.success,
     },
     progressDot: {
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: COLORS.surfaceLight,
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: 4,
     },
-    progressDotActive: {
-        backgroundColor: COLORS.primary,
-    },
-    progressDotDone: {
-        backgroundColor: COLORS.success,
-    },
     progressDotText: {
-        fontSize: 14,
+        ...typography.labelMedium,
         fontWeight: '700',
-        color: COLORS.white,
     },
     progressLabel: {
-        fontSize: 11,
-        color: COLORS.textMuted,
+        ...typography.labelSmall,
         fontWeight: '500',
-    },
-    progressLabelActive: {
-        color: COLORS.primary,
-        fontWeight: '700',
     },
     stepContent: {
         flex: 1,
     },
     stepTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: COLORS.textPrimary,
+        ...typography.titleLarge,
         marginBottom: 4,
     },
     stepHint: {
-        fontSize: 14,
-        color: COLORS.textSecondary,
+        ...typography.bodyMedium,
         marginBottom: 20,
     },
     fieldLabel: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: COLORS.textSecondary,
+        ...typography.labelLarge,
         marginBottom: 8,
         marginTop: 8,
     },
@@ -562,36 +814,27 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14,
         paddingVertical: 9,
         borderRadius: 20,
-        backgroundColor: COLORS.surface,
         marginRight: 8,
         borderWidth: 1,
-        borderColor: COLORS.border + '40',
-    },
-    classChipActive: {
-        backgroundColor: COLORS.primary,
-        borderColor: COLORS.primary,
     },
     classChipText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: COLORS.textSecondary,
+        ...typography.labelMedium,
     },
-    classChipTextActive: {
-        color: COLORS.white,
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 12,
+        paddingHorizontal: 14,
+        gap: 8,
+        borderWidth: 1,
+        marginBottom: 8,
     },
     searchInput: {
-        backgroundColor: COLORS.surface,
-        borderRadius: 12,
-        paddingHorizontal: 16,
+        flex: 1,
         paddingVertical: 13,
-        fontSize: 15,
-        color: COLORS.textPrimary,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: COLORS.border + '40',
+        ...typography.bodyLarge,
     },
     studentItem: {
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         padding: 14,
         marginBottom: 8,
@@ -599,76 +842,55 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: COLORS.border + '30',
         minHeight: 60,
     },
-    studentItemSelected: {
-        borderColor: COLORS.primary,
-        backgroundColor: COLORS.primary + '10',
-    },
     studentName: {
-        fontSize: 15,
+        ...typography.bodyLarge,
         fontWeight: '600',
-        color: COLORS.textPrimary,
     },
     studentMeta: {
-        fontSize: 12,
-        color: COLORS.textSecondary,
+        ...typography.bodySmall,
         marginTop: 2,
     },
-    checkMark: {
-        fontSize: 20,
-        color: COLORS.primary,
-        fontWeight: '700',
-    },
     selectedBanner: {
-        backgroundColor: COLORS.primary + '10',
         borderRadius: 12,
         padding: 14,
         borderWidth: 1,
-        borderColor: COLORS.primary + '40',
         marginTop: 8,
     },
     selectedBannerText: {
-        fontSize: 14,
-        color: COLORS.textSecondary,
+        ...typography.bodyMedium,
         marginBottom: 10,
     },
     nextButton: {
-        backgroundColor: COLORS.primary,
         borderRadius: 12,
         paddingVertical: 14,
         alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 6,
     },
     nextButtonText: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: COLORS.white,
+        ...typography.labelLarge,
     },
     studentSelectedCard: {
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         padding: 14,
         borderWidth: 1,
-        borderColor: COLORS.primary + '30',
         marginBottom: 20,
     },
     studentSelectedLabel: {
-        fontSize: 12,
-        color: COLORS.textMuted,
+        ...typography.labelSmall,
         fontWeight: '600',
         textTransform: 'uppercase',
         letterSpacing: 0.5,
     },
     studentSelectedName: {
-        fontSize: 17,
-        fontWeight: '700',
-        color: COLORS.textPrimary,
+        ...typography.titleMedium,
         marginTop: 2,
     },
     studentSelectedClass: {
-        fontSize: 13,
-        color: COLORS.textSecondary,
+        ...typography.bodySmall,
         marginTop: 2,
     },
     backButton: {
@@ -677,27 +899,22 @@ const styles = StyleSheet.create({
         marginTop: 16,
     },
     backButtonText: {
-        fontSize: 15,
-        color: COLORS.textSecondary,
-        fontWeight: '500',
+        ...typography.labelLarge,
     },
     savingOverlay: {
         alignItems: 'center',
         paddingVertical: 32,
     },
     savingText: {
+        ...typography.bodyLarge,
         marginTop: 12,
-        fontSize: 15,
-        color: COLORS.textSecondary,
     },
     tabsContainer: {
         flexDirection: 'row',
-        backgroundColor: COLORS.surface,
         borderRadius: 12,
         padding: 4,
         marginBottom: 24,
         borderWidth: 1,
-        borderColor: COLORS.border + '30',
     },
     tabButton: {
         flex: 1,
@@ -705,82 +922,100 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderRadius: 8,
     },
-    tabButtonActive: {
-        backgroundColor: COLORS.primary + '20',
-    },
     tabText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: COLORS.textMuted,
-    },
-    tabTextActive: {
-        color: COLORS.primary,
+        ...typography.labelMedium,
     },
     textInputContainer: {
         marginBottom: 16,
     },
     textInputHint: {
-        fontSize: 13,
-        color: COLORS.textSecondary,
+        ...typography.bodySmall,
         marginBottom: 10,
         lineHeight: 20,
     },
     textInputArea: {
-        backgroundColor: COLORS.surface,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: COLORS.border + '50',
         minHeight: 160,
         padding: 16,
-        fontSize: 15,
-        color: COLORS.textPrimary,
+        ...typography.bodyLarge,
         lineHeight: 22,
         marginBottom: 16,
         textAlignVertical: 'top',
     },
     processTextButton: {
-        backgroundColor: COLORS.primary,
         borderRadius: 12,
         paddingVertical: 16,
         alignItems: 'center',
     },
     processTextButtonLabel: {
-        fontSize: 15,
-        fontWeight: '700',
-        color: COLORS.white,
-    },
-    processingTextContainer: {
-        alignItems: 'center',
-        paddingVertical: 24,
-        backgroundColor: COLORS.surface,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: COLORS.border + '30',
-    },
-    processingLabel: {
-        marginTop: 12,
-        fontSize: 14,
-        color: COLORS.primary,
-        fontWeight: '600',
-    },
-    cancelButton: {
-        marginTop: 12,
-        paddingVertical: 8,
-        paddingHorizontal: 20,
-        borderRadius: 20,
-        backgroundColor: COLORS.surfaceLight,
-    },
-    cancelText: {
-        color: COLORS.textSecondary,
-        fontSize: 13,
-        fontWeight: '600',
+        ...typography.labelLarge,
     },
     emptyListText: {
         textAlign: 'center',
-        color: COLORS.textMuted,
         paddingVertical: 24,
-        fontSize: 14,
+        ...typography.bodyMedium,
         lineHeight: 22,
         paddingHorizontal: 16,
+    },
+    locationGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 12,
+        marginTop: 8,
+    },
+    locationItem: {
+        width: '47%' as any,
+        borderRadius: 12,
+        paddingVertical: 18,
+        paddingHorizontal: 12,
+        alignItems: 'center',
+        borderWidth: 2,
+    },
+    locationItemText: {
+        ...typography.labelLarge,
+        textAlign: 'center',
+    },
+    categoryItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 12,
+        paddingVertical: 14,
+        paddingHorizontal: 14,
+        marginBottom: 8,
+        borderWidth: 2,
+        gap: 12,
+    },
+    categoryItemText: {
+        flex: 1,
+        ...typography.bodyMedium,
+    },
+    categoryNumber: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        ...typography.labelSmall,
+        fontWeight: '700',
+        textAlign: 'center',
+        lineHeight: 28,
+        overflow: 'hidden',
+    },
+    preGeneratedCard: {
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+    },
+    preGeneratedTitle: {
+        ...typography.titleMedium,
+        marginBottom: 8,
+    },
+    preGeneratedHint: {
+        ...typography.bodySmall,
+        marginBottom: 12,
+        lineHeight: 20,
     },
 });

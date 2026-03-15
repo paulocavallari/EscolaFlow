@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "smoke:all": "node scripts/smoke-all.mjs"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -27,11 +28,13 @@
     "expo-speech-recognition": "^3.1.0",
     "expo-status-bar": "~3.0.9",
     "pg": "^8.18.0",
+    "phosphor-react-native": "^3.0.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-safe-area-context": "^5.6.2",
     "react-native-screens": "^4.23.0",
+    "react-native-svg": "^15.15.3",
     "react-native-url-polyfill": "^3.0.0",
     "react-native-web": "^0.21.0"
   },

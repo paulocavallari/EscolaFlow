@@ -13,10 +13,11 @@ import {
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { router } from 'expo-router';
+import { NotePencil, Tray } from 'phosphor-react-native';
 import { useOccurrencesList } from '../../../src/hooks/useOccurrences';
 import { OccurrenceCard } from '../../../src/components/OccurrenceCard';
 import { OccurrenceStatus, OccurrenceWithRelations } from '../../../src/types/database';
-import { COLORS } from '../../../src/lib/constants';
+import { useTheme, typography } from '../../../src/lib/theme';
 
 type FilterTab = 'all' | OccurrenceStatus;
 
@@ -28,6 +29,7 @@ const TAB_DEFS: { key: FilterTab; label: string }[] = [
 ];
 
 export default function OccurrenceListScreen() {
+    const { colors } = useTheme();
     const { filter } = useLocalSearchParams<{ filter?: string }>();
     const [activeTab, setActiveTab] = useState<FilterTab>('all');
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -69,7 +71,7 @@ export default function OccurrenceListScreen() {
     );
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
             {/* Filter Tabs */}
             <View style={styles.tabBar}>
                 {TABS.map((tab) => (
@@ -77,14 +79,16 @@ export default function OccurrenceListScreen() {
                         key={tab.key}
                         style={[
                             styles.tab,
-                            activeTab === tab.key && styles.tabActive,
+                            { backgroundColor: colors.surfaceVariant },
+                            activeTab === tab.key && { backgroundColor: colors.primary },
                         ]}
                         onPress={() => setActiveTab(tab.key)}
                     >
                         <Text
                             style={[
                                 styles.tabText,
-                                activeTab === tab.key && styles.tabTextActive,
+                                { color: colors.onSurfaceVariant },
+                                activeTab === tab.key && { color: colors.onPrimary },
                             ]}
                         >
                             {tab.label}
@@ -92,11 +96,13 @@ export default function OccurrenceListScreen() {
                         {tab.count > 0 && (
                             <View style={[
                                 styles.tabBadge,
-                                activeTab === tab.key && styles.tabBadgeActive,
+                                { backgroundColor: colors.surfaceVariant },
+                                activeTab === tab.key && { backgroundColor: 'rgba(255,255,255,0.25)' },
                             ]}>
                                 <Text style={[
                                     styles.tabBadgeText,
-                                    activeTab === tab.key && styles.tabBadgeTextActive,
+                                    { color: colors.onSurfaceVariant },
+                                    activeTab === tab.key && { color: colors.onPrimary },
                                 ]}>
                                     {tab.count}
                                 </Text>
@@ -109,8 +115,8 @@ export default function OccurrenceListScreen() {
             {/* Occurrence List */}
             {isLoading && !allOccurrences ? (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={COLORS.primary} />
-                    <Text style={styles.loadingText}>Carregando ocorrências...</Text>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                    <Text style={[styles.loadingText, { color: colors.onSurfaceVariant }]}>Carregando ocorrências...</Text>
                 </View>
             ) : (
                 <FlatList
@@ -122,14 +128,16 @@ export default function OccurrenceListScreen() {
                         <RefreshControl
                             refreshing={isRefreshing}
                             onRefresh={handleRefresh}
-                            tintColor={COLORS.primary}
+                            tintColor={colors.primary}
                         />
                     }
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
-                            <Text style={styles.emptyIcon}>📭</Text>
-                            <Text style={styles.emptyTitle}>Nenhuma ocorrência</Text>
-                            <Text style={styles.emptySubtext}>
+                            <View style={[styles.emptyIconCircle, { backgroundColor: colors.surfaceVariant }]}>
+                                <Tray size={40} color={colors.onSurfaceVariant} weight="duotone" />
+                            </View>
+                            <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>Nenhuma ocorrência</Text>
+                            <Text style={[styles.emptySubtext, { color: colors.onSurfaceVariant }]}>
                                 {activeTab === 'all'
                                     ? 'Nenhuma ocorrência registrada ainda.'
                                     : 'Nenhuma ocorrência com este status.'}
@@ -141,12 +149,12 @@ export default function OccurrenceListScreen() {
 
             {/* FAB: New Occurrence — expanded pill for clarity */}
             <TouchableOpacity
-                style={styles.fab}
+                style={[styles.fab, { backgroundColor: colors.primary, shadowColor: colors.primary }]}
                 onPress={() => router.push('/(app)/occurrences/create')}
                 activeOpacity={0.8}
             >
-                <Text style={styles.fabIcon}>📝</Text>
-                <Text style={styles.fabText}>Nova Ocorrência</Text>
+                <NotePencil size={22} color={colors.onPrimary} weight="bold" />
+                <Text style={[styles.fabText, { color: colors.onPrimary }]}>Nova Ocorrência</Text>
             </TouchableOpacity>
         </View>
     );
@@ -155,7 +163,6 @@ export default function OccurrenceListScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background,
     },
     tabBar: {
         flexDirection: 'row',
@@ -169,38 +176,21 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 20,
-        backgroundColor: COLORS.surface,
         gap: 5,
     },
-    tabActive: {
-        backgroundColor: COLORS.primary,
-    },
     tabText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: COLORS.textSecondary,
-    },
-    tabTextActive: {
-        color: COLORS.white,
+        ...typography.labelMedium,
     },
     tabBadge: {
-        backgroundColor: COLORS.surfaceLight,
         borderRadius: 10,
         paddingHorizontal: 6,
         paddingVertical: 1,
         minWidth: 20,
         alignItems: 'center',
     },
-    tabBadgeActive: {
-        backgroundColor: 'rgba(255,255,255,0.25)',
-    },
     tabBadgeText: {
-        fontSize: 11,
+        ...typography.labelSmall,
         fontWeight: '700',
-        color: COLORS.textMuted,
-    },
-    tabBadgeTextActive: {
-        color: COLORS.white,
     },
     listContent: {
         padding: 16,
@@ -213,26 +203,26 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     loadingText: {
-        fontSize: 14,
-        color: COLORS.textSecondary,
+        ...typography.bodyMedium,
     },
     emptyContainer: {
         alignItems: 'center',
         paddingTop: 60,
     },
-    emptyIcon: {
-        fontSize: 48,
-        marginBottom: 12,
+    emptyIconCircle: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
     },
     emptyTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: COLORS.textPrimary,
+        ...typography.titleMedium,
         marginBottom: 4,
     },
     emptySubtext: {
-        fontSize: 14,
-        color: COLORS.textSecondary,
+        ...typography.bodyMedium,
         textAlign: 'center',
         paddingHorizontal: 40,
     },
@@ -242,24 +232,17 @@ const styles = StyleSheet.create({
         right: 16,
         left: 16,
         borderRadius: 16,
-        backgroundColor: COLORS.primary,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: 16,
         gap: 10,
-        shadowColor: COLORS.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4,
         shadowRadius: 12,
         elevation: 8,
     },
-    fabIcon: {
-        fontSize: 20,
-    },
     fabText: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: COLORS.white,
+        ...typography.labelLarge,
     },
 });

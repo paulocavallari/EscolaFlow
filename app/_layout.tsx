@@ -1,5 +1,5 @@
 // app/_layout.tsx
-// Root layout: Auth provider, TanStack Query provider, and navigation
+// Root layout: Theme, Auth, TanStack Query providers and navigation
 
 import React from 'react';
 import { Stack } from 'expo-router';
@@ -7,21 +7,30 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { queryClient } from '../src/lib/queryClient';
 import { AuthContext, useAuthProvider } from '../src/hooks/useAuth';
-import { COLORS } from '../src/lib/constants';
+import { ThemeProvider, useTheme } from '../src/lib/theme';
 
 export default function RootLayout() {
+    return (
+        <ThemeProvider>
+            <RootLayoutInner />
+        </ThemeProvider>
+    );
+}
+
+function RootLayoutInner() {
     const authState = useAuthProvider();
+    const { colors, isDark } = useTheme();
 
     return (
         <QueryClientProvider client={queryClient}>
             <AuthContext.Provider value={authState}>
-                <StatusBar style="light" />
+                <StatusBar style={isDark ? 'light' : 'dark'} />
                 <Stack
                     screenOptions={{
-                        headerStyle: { backgroundColor: COLORS.background },
-                        headerTintColor: COLORS.textPrimary,
+                        headerStyle: { backgroundColor: colors.background },
+                        headerTintColor: colors.onBackground,
                         headerTitleStyle: { fontWeight: '700' },
-                        contentStyle: { backgroundColor: COLORS.background },
+                        contentStyle: { backgroundColor: colors.background },
                         animation: 'slide_from_right',
                     }}
                 >

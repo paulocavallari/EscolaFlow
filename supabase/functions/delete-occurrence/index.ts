@@ -2,14 +2,14 @@
 // Edge Function to delete an occurrence using service_role key (bypasses RLS)
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { getCorsHeaders } from '../_shared/cors.ts';
+import { verifyAuth, ensureAdminOrVP } from '../_shared/auth.ts';
+import { createAdminClient } from '../_shared/supabase.ts';
+import { errorResponse, jsonResponse } from '../_shared/errors.ts';
 
 serve(async (req: Request) => {
+    const corsHeaders = getCorsHeaders(req);
+
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders });
     }
@@ -18,61 +18,16 @@ serve(async (req: Request) => {
         const { occurrence_id } = await req.json();
 
         if (!occurrence_id) {
-            return new Response(JSON.stringify({ error: 'Missing occurrence_id' }), {
-                status: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
+            return errorResponse(corsHeaders, 400, 'Missing occurrence_id');
         }
 
-        // Verify the caller is admin or vice_director
-        const authHeader = req.headers.get('Authorization');
-        if (!authHeader) {
-            return new Response(JSON.stringify({ error: 'Not authenticated' }), {
-                status: 401,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-        }
+        const auth = await verifyAuth(req, corsHeaders);
+        if (!auth.ok) return auth.response;
 
-        const supabaseUser = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-            { global: { headers: { Authorization: authHeader } } }
-        );
+        const allowed = await ensureAdminOrVP(auth.user.id);
+        if (!allowed) return errorResponse(corsHeaders, 403, 'Insufficient permissions');
 
-        // Get the user's profile to verify role
-        const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
-        if (userError || !user) {
-            return new Response(JSON.stringify({ error: 'Invalid session' }), {
-                status: 401,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-        }
-
-        const supabaseAdmin = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-        );
-
-        // Verify role
-        const { data: profile, error: profileError } = await supabaseAdmin
-            .from('profiles')
-            .select('role')
-            .eq('auth_id', user.id)
-            .single();
-
-        if (profileError || !profile) {
-            return new Response(JSON.stringify({ error: 'Profile not found' }), {
-                status: 403,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-        }
-
-        if (profile.role !== 'admin' && profile.role !== 'vice_director') {
-            return new Response(JSON.stringify({ error: 'Insufficient permissions' }), {
-                status: 403,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-        }
+        const supabaseAdmin = createAdminClient();
 
         // Delete with service_role (bypasses RLS)
         // First delete associated actions
@@ -93,22 +48,13 @@ serve(async (req: Request) => {
 
         if (deleteError) {
             console.error('Error deleting occurrence:', deleteError);
-            return new Response(JSON.stringify({ error: deleteError.message }), {
-                status: 500,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
+            return errorResponse(corsHeaders, 500, deleteError.message);
         }
 
-        return new Response(JSON.stringify({ success: true }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return jsonResponse({ success: true }, 200, corsHeaders);
 
     } catch (error: any) {
         console.error('Delete error:', error);
-        return new Response(JSON.stringify({ error: error.message || 'Internal error' }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return errorResponse(corsHeaders, 500, error.message || 'Internal error');
     }
 });

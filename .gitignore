@@ -43,4 +43,8 @@ supabase/.temp/
 # test/scratch scripts (may contain keys)
 test-models.js
 test-*.js
+test_*.js
+verify_*.js
+.env.production
+.env.*.production
 scripts/apply_rls_migration.mjs

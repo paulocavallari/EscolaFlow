@@ -34,6 +34,11 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/process-audio/deno.json"
 entrypoint = "./functions/process-audio/index.ts"
+
+[functions.categorize-occurrence]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/categorize-occurrence/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/process-text/*.html" ]

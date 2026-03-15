@@ -6,16 +6,20 @@ if (dns.setDefaultResultOrder) {
 }
 
 const client = new Client({
-    host: 'db.pwhjjsxqoogmcairesub.supabase.co',
-    port: 5432,
-    user: 'postgres',
-    password: 'Pa7412365**',
-    database: 'postgres',
+    host: process.env.SUPABASE_DB_HOST || 'db.pwhjjsxqoogmcairesub.supabase.co',
+    port: Number(process.env.SUPABASE_DB_PORT || 5432),
+    user: process.env.SUPABASE_DB_USER || 'postgres',
+    password: process.env.SUPABASE_DB_PASSWORD,
+    database: process.env.SUPABASE_DB_NAME || 'postgres',
     ssl: { rejectUnauthorized: false }
 });
 
 async function runMigration() {
     try {
+        if (!process.env.SUPABASE_DB_PASSWORD) {
+            throw new Error('Missing SUPABASE_DB_PASSWORD in environment');
+        }
+
         await client.connect();
         console.log('Connected to database');
 
