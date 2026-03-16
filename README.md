@@ -1,244 +1,135 @@
-<h1 align="center">
-  <br>
-  🏫 EscolaFlow
-  <br>
-</h1>
+# EscolaFlow (Ocorrências VC)
 
-<p align="center">
-  <strong>Plataforma de gestão de ocorrências escolares com transcrição de áudio por IA</strong>
-</p>
+Plataforma mobile para gestão de ocorrências escolares com formalização assistida por IA, trilha de tratativas e comunicação com responsáveis.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/React_Native-0.81-61DAFB?style=for-the-badge&logo=react&logoColor=white" />
-  <img src="https://img.shields.io/badge/Expo-54-000020?style=for-the-badge&logo=expo&logoColor=white" />
-  <img src="https://img.shields.io/badge/Supabase-2.x-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" />
-  <img src="https://img.shields.io/badge/Gemini_AI-2.0_Flash-4285F4?style=for-the-badge&logo=google&logoColor=white" />
-  <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
-</p>
+## Visão de produto
+O EscolaFlow transforma um processo escolar crítico, normalmente manual e inconsistente, em um fluxo digital auditável:
+- registro rápido por professor,
+- texto formal padronizado para uso institucional,
+- tratativa por tutor/vice-direção,
+- histórico completo com exportação de relatório.
 
----
+Resultado esperado:
+- redução do tempo de registro,
+- maior qualidade documental,
+- melhor governança pedagógica e administrativa.
 
-## ✨ O que é o EscolaFlow?
+## Principais diferenciais
+- Formalização de relatos com IA via OpenRouter (multi-model racing)
+- Degradação graciosa quando IA está indisponível (não bloqueia operação)
+- Controle de acesso por papel com RLS no Supabase
+- Fluxo de tratativa em múltiplas etapas (Tutor -> Vice-Direção)
+- Reclassificação de categoria durante tratativa (incluindo substituição de OUTRO)
+- Exportação de relatório em PDF pronto para arquivo institucional
+- Importação CSV para operações administrativas
 
-O **EscolaFlow** é um app mobile (iOS, Android e Web) que digitaliza e agiliza o registro de ocorrências escolares. O professor **grava um áudio** descrevendo o ocorrido, e a IA transcreve e **reescreve o relato de forma formal e profissional** automaticamente — pronto para o registro oficial.
+## Stack técnica
+- React Native 0.81 + Expo 54 + Expo Router
+- TypeScript
+- TanStack Query v5
+- Supabase (PostgreSQL, Auth, Edge Functions)
+- OpenRouter (formalização de texto)
+- Evolution API (WhatsApp)
+- EAS Build (APK/AAB)
 
----
+## Arquitetura resumida
+- Frontend: app/ e src/
+- Backend serverless: supabase/functions/
+- Banco e políticas: supabase/migrations/
+- Scripts operacionais: scripts/
 
-## 🚀 Funcionalidades
+Fluxo principal:
+1. Professor registra relato (voz ou texto)
+2. IA formaliza conteúdo
+3. Professor revisa e confirma
+4. Tutor trata ou escala
+5. Vice-direção conclui e comunica
 
-| Funcionalidade | Descrição |
-|---|---|
-| 🎙️ **Gravação de Áudio** | Grave ocorrências via microfone com feedback visual em tempo real |
-| 🤖 **Transcrição + Reescrita por IA** | Gemini 2.0 Flash transcreve e reescreve o relato em linguagem formal |
-| ✏️ **Revisão Editável** | Professor revisa e edita o texto antes de confirmar |
-| 📱 **Notificação WhatsApp** | Responsável recebe notificação no WhatsApp automaticamente |
-| 📊 **Painel de Ocorrências** | Histórico completo com filtros por status e aluno |
-| 👥 **Controle de Acesso por Papel** | Permissões diferentes para Professor, Vice-Diretor e Admin |
-| 📋 **Importação CSV** | Cadastro em massa de turmas e alunos via planilha |
-| 🔒 **Segurança RLS** | Row Level Security no PostgreSQL — cada usuário vê só o que pode |
+## Segurança (resumo)
+- Cliente usa anon key e depende de RLS
+- Operações privilegiadas passam por Edge Functions autenticadas
+- Verificação de papel em endpoints administrativos
+- Validação de payload e normalização de campos sensíveis
+- Segredos mantidos no ambiente server-side
 
----
+Para detalhes completos: docs/SECURITY.md
 
-## 🔄 Fluxo de uma Ocorrência
+## Documentação completa
+- Arquitetura: docs/ARCHITECTURE.md
+- Segurança: docs/SECURITY.md
+- Operação e deploy: docs/OPERATIONS.md
 
-```
-Professor grava áudio
-        │
-        ▼
-Gemini transcreve + reescreve
-        │
-        ▼
-Professor revisa e confirma
-        │
-        ▼
-Ocorrência salva → WhatsApp enviado ao responsável
-        │
-        ▼
-Orientador/Tutor trata (resolve ou escala)
-        │
-        ▼
-Vice-Direção atua (se escalado)
-        │
-        ▼
-✅ Concluída
-```
+## Começando rápido
+## 1) Instalação
+- npm install
 
----
+## 2) Variáveis de ambiente (cliente)
+Crie/edite .env com:
+- EXPO_PUBLIC_SUPABASE_URL
+- EXPO_PUBLIC_SUPABASE_ANON_KEY
 
-## 🎭 Papéis de Usuário
+## 3) Executar app
+- npm start
+- npm run android
+- npm run ios
+- npm run web
 
-| Papel | Permissões |
-|---|---|
-| **Professor** | Registra ocorrências, visualiza as suas próprias |
-| **Vice-Diretor** | Visualiza e trata ocorrências escaladas |
-| **Admin** | Acesso total — gerencia usuários, turmas e alunos |
+## 4) Smoke test
+Antes de release, rode:
+- npm run smoke:all
 
----
+Defina também:
+- SMOKE_ADMIN_EMAIL
+- SMOKE_ADMIN_PASSWORD
+- SMOKE_PROF_EMAIL
+- SMOKE_PROF_PASSWORD
 
-## 🗂️ Arquitetura
+## Backend (Supabase)
+## Aplicar migrations
+- supabase db push --project-ref <project_ref>
 
-```
-EscolaFlow/
-├── app/
-│   ├── (auth)/          # Tela de login
-│   └── (app)/
-│       ├── index.tsx        # Dashboard
-│       ├── occurrences/     # Lista, detalhes e criação de ocorrências
-│       └── admin/           # Gestão de usuários, turmas e alunos
-├── src/
-│   ├── components/      # AudioRecorder, AIReviewModal, OccurrenceCard...
-│   ├── hooks/           # useOccurrences, useStudents, useAuth, useProfile
-│   ├── lib/             # Supabase client, constantes, tema de cores
-│   ├── services/        # WhatsApp (Evolution API)
-│   └── types/           # Tipos TypeScript do banco de dados
-└── supabase/
-    ├── functions/
-    │   ├── process-audio/     # Transcrição + reescrita via Gemini
-    │   ├── send-whatsapp/     # Notificação via Evolution API
-    │   ├── import-csv/        # Importação de alunos em massa
-    │   └── admin-create-user/ # Criação de usuários pelo admin
-    └── migrations/
-        └── 001_initial_schema.sql
-```
+## Deploy de funções
+- supabase functions deploy process-text --project-ref <project_ref>
+- supabase functions deploy send-whatsapp --project-ref <project_ref>
+- supabase functions deploy send-whatsapp-manual --project-ref <project_ref>
+- supabase functions deploy import-csv --project-ref <project_ref>
+- supabase functions deploy delete-occurrence --project-ref <project_ref>
+- supabase functions deploy admin-create-user --project-ref <project_ref>
+- supabase functions deploy admin-update-user --project-ref <project_ref>
+- supabase functions deploy admin-delete-user --project-ref <project_ref>
+- supabase functions deploy categorize-occurrence --project-ref <project_ref>
 
----
+## Build Android
+Perfis em eas.json:
+- preview: APK interno
+- production: AAB para distribuição oficial
 
-## 🧠 Como funciona a IA
+Comandos:
+- eas build --platform android --profile preview
+- eas build --platform android --profile production
 
-A Edge Function `process-audio` recebe o arquivo de áudio e realiza **duas chamadas ao Gemini 2.0 Flash**:
+## Estrutura do repositório
+- app/ : rotas e telas
+- src/components/ : UI e blocos funcionais
+- src/hooks/ : casos de uso e integração com dados
+- src/lib/ : infraestrutura cliente (theme, supabase, query client)
+- src/services/ : integrações externas
+- src/utils/ : utilitários (ex.: PDF)
+- supabase/functions/ : backend serverless
+- supabase/migrations/ : evolução do schema
+- scripts/ : automações de suporte
 
-1. **Transcrição** — converte o áudio em texto bruto (em português brasileiro)
-2. **Reescrita formal** — transforma o relato informal em linguagem adequada para registro escolar oficial
+## Qualidade e governança
+- TypeScript em toda a base
+- Migrations versionadas
+- Smoke suite para regressão funcional e RBAC
+- Commits semânticos recomendados (feat/fix/docs/chore)
 
-O áudio é enviado como `inline_data` (base64) diretamente para a API multimodal do Gemini — sem custo de storage.
+## Roadmap sugerido
+- CI com pipeline de validação automática
+- Hardening adicional de funções e políticas
+- Métricas e alertas para IA/WhatsApp
+- Painel de telemetria operacional
 
----
-
-## 🛠️ Stack Tecnológica
-
-| Camada | Tecnologia |
-|---|---|
-| **Frontend** | React Native + Expo Router (file-based routing) |
-| **Estado/Cache** | TanStack Query v5 |
-| **Backend** | Supabase (PostgreSQL + Auth + Edge Functions) |
-| **IA** | Google Gemini 2.0 Flash |
-| **Áudio** | expo-av |
-| **WhatsApp** | Evolution API |
-| **Linguagem** | TypeScript |
-
----
-
-## ⚙️ Configuração
-
-### 1. Clone o repositório
-
-```bash
-git clone https://github.com/paulocavallari/EscolaFlow.git
-cd EscolaFlow
-npm install
-```
-
-### 2. Configure as variáveis de ambiente
-
-Copie o `.env` e preencha com suas credenciais:
-
-```bash
-cp .env.example .env
-```
-
-```env
-EXPO_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key
-```
-
-### 3. Configure os secrets das Edge Functions
-
-No [Dashboard do Supabase](https://supabase.com/dashboard) → **Edge Functions** → **Manage secrets**:
-
-```
-GEMINI_API_KEY=sua_chave_gemini
-EVOLUTION_API_URL=http://seu-servidor:8080
-EVOLUTION_API_KEY=sua_chave_evolution
-EVOLUTION_INSTANCE_NAME=nome_da_instancia
-```
-
-### 4. Execute a migration do banco
-
-```bash
-supabase db push --project-ref seu-project-ref
-```
-
-### 5. Faça deploy das Edge Functions
-
-```bash
-supabase functions deploy --project-ref seu-project-ref
-```
-
-### 6. Rode o app
-
-```bash
-npm start          # Expo Go / web
-npm run ios        # Simulador iOS
-npm run android    # Emulador Android
-npm run web        # Navegador
-```
-
----
-
-## 📦 Scripts úteis
-
-| Script | Descrição |
-|---|---|
-| `npm start` | Inicia o Expo Dev Server |
-| `npm run ios` | Abre no simulador iOS |
-| `npm run android` | Abre no emulador Android |
-| `npm run web` | Abre no navegador |
-| `npm run smoke:all` | Executa smoke test completo (build, auth, RBAC e funções Edge) |
-| `bash scripts/deploy-process-audio.sh` | Faz deploy da função de transcrição |
-| `npx ts-node scripts/create_admin.ts` | Cria usuário admin via script |
-
-### Smoke test completo
-
-Defina credenciais de teste antes de rodar:
-
-```bash
-# Exemplo (PowerShell)
-$env:SMOKE_ADMIN_EMAIL="admin@vc.com.br"
-$env:SMOKE_ADMIN_PASSWORD="sua_senha_admin"
-$env:SMOKE_PROF_EMAIL="prof1@vc.com.br"
-$env:SMOKE_PROF_PASSWORD="sua_senha_professor"
-
-npm run smoke:all
-```
-
-O script `scripts/smoke-all.mjs` valida:
-
-- TypeScript compile (`npx tsc --noEmit`)
-- Build web (`npx expo export --platform web`)
-- Login admin e professor
-- `process-text` autenticado para ambos
-- RBAC (professor bloqueado em funções admin)
-- Fluxo admin (`admin-create-user`, `admin-update-user`, `admin-delete-user`)
-- `delete-occurrence` e `import-csv` para admin
-- Endpoints autenticados adicionais (`send-whatsapp-manual`, `categorize-occurrence`)
-- Cleanup automático de usuários temporários criados no teste
-
----
-
-## 🗄️ Schema do Banco de Dados
-
-```
-profiles       → Usuários com papel (professor, vice_director, admin)
-classes        → Turmas escolares
-students       → Alunos vinculados a turma e tutor
-occurrences    → Ocorrências com texto original e versão formal
-actions        → Tratativas registradas em cada ocorrência
-```
-
-Todas as tabelas têm **Row Level Security (RLS)** — cada usuário acessa apenas os dados que seu papel permite.
-
----
-
-## 📄 Licença
-
-Projeto privado — todos os direitos reservados.
+## Licença
+Projeto privado. Todos os direitos reservados.

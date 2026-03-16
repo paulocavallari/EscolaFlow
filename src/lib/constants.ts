@@ -194,6 +194,8 @@ export const FINAL_CATEGORY_LABELS: Record<OccurrenceFinalCategory, string> = {
     [OccurrenceFinalCategory.XENOFOBIA]: 'Xenofobia',
 };
 
+export const FINAL_CATEGORIES: OccurrenceFinalCategory[] = Object.values(OccurrenceFinalCategory);
+
 // ============================================================
 // Pre-generated descriptions for categories 1-27
 // ============================================================

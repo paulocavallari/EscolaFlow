@@ -45,8 +45,9 @@ import {
     ActionType,
     UserRole,
     OccurrenceCategory,
+    OccurrenceFinalCategory,
 } from '../../../src/types/database';
-import { ACTION_TYPE_LABELS, LOCATION_LABELS, CATEGORY_LABELS } from '../../../src/lib/constants';
+import { ACTION_TYPE_LABELS, LOCATION_LABELS, CATEGORY_LABELS, FINAL_CATEGORIES, FINAL_CATEGORY_LABELS } from '../../../src/lib/constants';
 import { sendWhatsAppMessage } from '../../../src/services/whatsappService';
 import { showAlert, showConfirmDialog, showDoubleConfirmDialog } from '../../../src/utils/confirmDialogs';
 import {
@@ -77,6 +78,8 @@ export default function OccurrenceDetailScreen() {
     const deleteOccurrence = useDeleteOccurrence();
     const [selectedCategory, setSelectedCategory] = useState<OccurrenceCategory | null>(null);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+    const [selectedFinalCategory, setSelectedFinalCategory] = useState<OccurrenceFinalCategory | null>(null);
+    const [showFinalCategoryPicker, setShowFinalCategoryPicker] = useState(false);
 
     const canTreat = Boolean(
         occurrence &&
@@ -295,17 +298,27 @@ export default function OccurrenceDetailScreen() {
             const effectiveCategory = selectedCategory ?? occurrence.category;
 
             // Block conclude if category is still OUTRO.
-            // For OUTRO occurrences, tutor/VP must reclassify before concluding.
             if (
                 newStatus === OccurrenceStatus.CONCLUDED &&
                 effectiveCategory === OccurrenceCategory.OUTRO
             ) {
-                Alert.alert(
-                    'Categoria Obrigatória',
-                    'Como a ocorrência está em "Outro Tipo de Ocorrência", selecione a categoria correta antes de concluir.'
-                );
-                setShowCategoryPicker(true);
-                return;
+                if (isVP || isAdmin) {
+                    if (!selectedFinalCategory) {
+                        Alert.alert(
+                            'Categoria Final Obrigatória',
+                            'Como a ocorrência está em "Outro Tipo de Ocorrência", selecione uma Categoria Final antes de concluir.'
+                        );
+                        setShowFinalCategoryPicker(true);
+                        return;
+                    }
+                } else {
+                    Alert.alert(
+                        'Categoria Obrigatória',
+                        'Como a ocorrência está em "Outro Tipo de Ocorrência", selecione a categoria correta antes de concluir.'
+                    );
+                    setShowCategoryPicker(true);
+                    return;
+                }
             }
 
             await addAction.mutateAsync({
@@ -315,6 +328,7 @@ export default function OccurrenceDetailScreen() {
                 action_type: actionType,
                 newStatus,
                 ...(effectiveCategory !== occurrence.category ? { category: effectiveCategory } : {}),
+                ...(selectedFinalCategory ? { final_category: selectedFinalCategory } : {}),
             });
 
             // Auto-notify all VP users when occurrence is escalated
@@ -348,7 +362,7 @@ export default function OccurrenceDetailScreen() {
         } catch (err) {
             Alert.alert('Erro', 'Falha ao registrar a tratativa.');
         }
-    }, [occurrence, profileId, manualTreatmentText, addAction, selectedCategory]);
+    }, [occurrence, profileId, manualTreatmentText, addAction, selectedCategory, selectedFinalCategory, isVP, isAdmin]);
 
     const handleSaveEdit = async () => {
         if (!editingActionId || !editContent.trim()) return;
@@ -723,6 +737,71 @@ export default function OccurrenceDetailScreen() {
                             </ScrollView>
                         )}
                     </View>
+
+                    {(isVP || isAdmin) && (selectedCategory ?? occurrence.category) === OccurrenceCategory.OUTRO && (
+                        <View style={[styles.finalCategorySection, { backgroundColor: colors.primary + '12', borderColor: colors.primary + '35' }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                                <Tag size={16} color={colors.onSurface} weight="bold" />
+                                <Text style={[styles.finalCategoryTitle, { color: colors.onSurface }]}>Categoria Final</Text>
+                            </View>
+                            <Text style={[styles.finalCategoryHint, { color: colors.onSurfaceVariant }]}>
+                                Ao concluir ocorrência classificada como "Outro Tipo de Ocorrência", selecione a Categoria Final a partir de FINAL_CATEGORIES.
+                            </Text>
+
+                            {!showFinalCategoryPicker && !selectedFinalCategory && (
+                                <TouchableOpacity
+                                    style={[styles.actionBtn, { backgroundColor: colors.primary }]}
+                                    onPress={() => setShowFinalCategoryPicker(true)}
+                                >
+                                    <Text style={[styles.actionBtnText, { color: colors.onPrimary }]}>Selecionar Categoria Final</Text>
+                                </TouchableOpacity>
+                            )}
+
+                            {selectedFinalCategory && !showFinalCategoryPicker && (
+                                <TouchableOpacity
+                                    style={[styles.selectedCategoryChip, { backgroundColor: colors.success + '20', borderColor: colors.success + '40' }]}
+                                    onPress={() => setShowFinalCategoryPicker(true)}
+                                >
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                                        <CheckCircle size={16} color={colors.success} weight="fill" />
+                                        <Text style={[styles.selectedCategoryText, { color: colors.success }]}> 
+                                            {FINAL_CATEGORY_LABELS[selectedFinalCategory] ?? selectedFinalCategory}
+                                        </Text>
+                                    </View>
+                                    <Text style={[styles.changeCategoryText, { color: colors.primary }]}>Alterar</Text>
+                                </TouchableOpacity>
+                            )}
+
+                            {showFinalCategoryPicker && (
+                                <ScrollView style={[styles.finalCategoryList, { backgroundColor: colors.surface, borderColor: colors.outline + '30' }]} nestedScrollEnabled>
+                                    {FINAL_CATEGORIES.map((cat) => (
+                                        <TouchableOpacity
+                                            key={cat}
+                                            style={[
+                                                styles.finalCategoryItem,
+                                                { borderBottomColor: colors.outline + '20' },
+                                                selectedFinalCategory === cat && { backgroundColor: colors.primary + '15' },
+                                            ]}
+                                            onPress={() => {
+                                                setSelectedFinalCategory(cat);
+                                                setShowFinalCategoryPicker(false);
+                                            }}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.finalCategoryItemText,
+                                                    { color: colors.onSurface },
+                                                    selectedFinalCategory === cat && { color: colors.primary, fontWeight: '700' },
+                                                ]}
+                                            >
+                                                {FINAL_CATEGORY_LABELS[cat] ?? cat}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            )}
+                        </View>
+                    )}
 
                     {/* Action buttons */}
                     <View style={styles.actionButtons}>
