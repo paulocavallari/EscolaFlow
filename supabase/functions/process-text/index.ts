@@ -58,23 +58,57 @@ Texto original:
     // Models are split into tiers. All models within a tier are fired simultaneously;
     // the first successful response wins (Promise.any), the rest are aborted.
     // If an entire tier fails, the next tier is tried.
-    // This reduces worst-case latency from ~40s (sequential) to ~6s per tier.
+    //
+    // Coverage policy: include every currently-free text model exposed by
+    // OpenRouter's model catalog (plus free-priced OpenRouter house models).
+    // Order favors lower latency first, larger/agentic models later.
     const MODEL_TIERS: string[][] = [
-      // Tier 1 — Fast (small active params, quickest inference)
-      // Trinity Mini leads: consistently fastest in production (observed <2s p50)
+      // Tier 1 — Ultra-fast small models (best chance of sub-2s responses)
       [
-        "arcee-ai/trinity-mini:free",      // 26B MoE / 3B active — fastest observed
-        "google/gemma-3-4b-it:free",       // 4B dense
-        "openai/gpt-oss-20b:free",         // 21B MoE / 3.6B active
+        "arcee-ai/trinity-mini:free",
+        "google/gemma-3-4b-it:free",
+        "google/gemma-3n-e2b-it:free",
+        "liquid/lfm-2.5-1.2b-instruct:free",
+        "qwen/qwen3-4b:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+        "stepfun/step-3.5-flash:free",
+        "nvidia/nemotron-nano-9b-v2:free",
       ],
-      // Tier 2 — Medium (larger but reliable, good Portuguese)
+
+      // Tier 2 — Balanced free models (quality + still relatively quick)
       [
-        "google/gemma-3-12b-it:free",                    // 12B dense
-        "mistralai/mistral-small-3.1-24b-instruct:free", // 24B dense
-        "google/gemma-3-27b-it:free",                    // 27B dense
+        "arcee-ai/trinity-large-preview:free",
+        "google/gemma-3-12b-it:free",
+        "google/gemma-3n-e4b-it:free",
+        "mistralai/mistral-small-3.1-24b-instruct:free",
+        "liquid/lfm-2.5-1.2b-thinking:free",
+        "nvidia/nemotron-3-nano-30b-a3b:free",
+        "z-ai/glm-4.5-air:free",
+        "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+      ],
+
+      // Tier 3 — Larger / frontier free models (higher latency, stronger reasoning)
+      [
+        "google/gemma-3-27b-it:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "qwen/qwen3-next-80b-a3b-instruct:free",
+        "qwen/qwen3-coder:free",
+        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "nvidia/nemotron-nano-12b-v2-vl:free",
+        "openrouter/hunter-alpha",
+        "openrouter/healer-alpha",
+      ],
+
+      // Tier 4 — Catch-all free fallbacks
+      [
+        "openai/gpt-oss-20b:free",
+        "openai/gpt-oss-120b:free",
+        "minimax/minimax-m2.5:free",
+        "openrouter/free",
       ],
     ];
-    const TIER_TIMEOUT_MS = 6000; // 6s max per tier
+    const TIER_TIMEOUT_MS = 7000; // 7s max per tier (more models per tier)
 
     interface RaceResult { model: string; content: string; }
 

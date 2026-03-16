@@ -11,14 +11,40 @@ export function useProcessText() {
     const { session } = useAuth();
     const token = session?.access_token ?? supabaseAnonKey;
 
+    const startGroup = (label: string, style?: string) => {
+        if (typeof console.group === 'function') {
+            console.group(label, style);
+            return;
+        }
+        console.log(label);
+    };
+
+    const endGroup = () => {
+        if (typeof console.groupEnd === 'function') {
+            console.groupEnd();
+        }
+    };
+
+    const startTimer = (label: string) => {
+        if (typeof console.time === 'function') {
+            console.time(label);
+        }
+    };
+
+    const endTimer = (label: string) => {
+        if (typeof console.timeEnd === 'function') {
+            console.timeEnd(label);
+        }
+    };
+
     return useMutation({
         mutationFn: async (text: string): Promise<AudioProcessingResult> => {
             const TIMEOUT_MS = 30_000;
-            const clientStart = performance.now();
+            const clientStart = Date.now();
 
-            console.group('%c✨ [process-text] OpenRouter request', 'color: #6366F1; font-weight: bold');
+            startGroup('%c✨ [process-text] OpenRouter request', 'color: #6366F1; font-weight: bold');
             console.log('📤 Input:', { chars: text.length, preview: text.slice(0, 80) + (text.length > 80 ? '…' : '') });
-            console.time('⏱ round-trip');
+            startTimer('⏱ round-trip');
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -35,9 +61,9 @@ export function useProcessText() {
                 });
 
                 clearTimeout(timeoutId);
-                const clientMs = Math.round(performance.now() - clientStart);
+                const clientMs = Math.round(Date.now() - clientStart);
 
-                console.timeEnd('⏱ round-trip');
+                endTimer('⏱ round-trip');
                 console.log(`📡 HTTP status: ${res.status} | client-side latency: ${clientMs}ms`);
 
                 const resText = await res.text();
@@ -47,14 +73,14 @@ export function useProcessText() {
                     parsed = JSON.parse(resText);
                 } catch {
                     console.error('❌ Non-JSON response:', resText.slice(0, 200));
-                    console.groupEnd();
+                    endGroup();
                     throw new Error(`Invalid JSON response: ${resText.substring(0, 100)}`);
                 }
 
                 if (!res.ok) {
                     const detailedError = parsed?.details || parsed?.error || `HTTP ${res.status}: ${JSON.stringify(parsed)}`;
                     console.error('❌ Edge Function error:', parsed);
-                    console.groupEnd();
+                    endGroup();
                     throw new Error(detailedError);
                 }
 
@@ -69,7 +95,7 @@ export function useProcessText() {
                     console.warn('%c⚠️ Formalization FAILED — using original text as fallback', 'color: #F59E0B; font-weight: bold');
                     console.warn('   Reason:', parsed.error);
                     console.warn('   Details:', parsed.details);
-                    console.groupEnd();
+                    endGroup();
                     return parsed as AudioProcessingResult;
                 }
 
@@ -83,17 +109,17 @@ export function useProcessText() {
                     formal_chars: parsed.formal?.length ?? 0,
                     formal_preview: (parsed.formal ?? '').slice(0, 100) + ((parsed.formal?.length ?? 0) > 100 ? '…' : ''),
                 });
-                console.groupEnd();
+                endGroup();
 
                 return parsed as AudioProcessingResult;
             } catch (err: any) {
                 clearTimeout(timeoutId);
                 if (err.name === 'AbortError') {
                     console.error(`❌ Client-side timeout after ${TIMEOUT_MS / 1000}s`);
-                    console.groupEnd();
+                    endGroup();
                     throw new Error('O processamento do texto demorou muito. Tente novamente.');
                 }
-                try { console.groupEnd(); } catch (_) {}
+                endGroup();
                 throw err;
             }
         },
