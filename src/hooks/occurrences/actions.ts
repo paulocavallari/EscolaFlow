@@ -1,14 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
-import { ActionInsert, OccurrenceFinalCategory, OccurrenceStatus, Profile } from '../../types/database';
+import { ActionInsert, OccurrenceCategory, OccurrenceStatus } from '../../types/database';
 import { OCCURRENCE_KEYS } from './keys';
 
 export function useAddAction() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (input: ActionInsert & { newStatus: OccurrenceStatus; final_category?: OccurrenceFinalCategory }): Promise<void> => {
-            const { newStatus, final_category, ...actionData } = input;
+        mutationFn: async (input: ActionInsert & { newStatus: OccurrenceStatus; category?: OccurrenceCategory }): Promise<void> => {
+            const { newStatus, category, ...actionData } = input;
 
             const { error: actionError } = await supabase
                 .from('actions')
@@ -17,8 +17,8 @@ export function useAddAction() {
             if (actionError) throw actionError;
 
             const updatePayload: Record<string, any> = { status: newStatus };
-            if (final_category) {
-                updatePayload.final_category = final_category;
+            if (category) {
+                updatePayload.category = category;
             }
 
             const { error: statusError } = await supabase
