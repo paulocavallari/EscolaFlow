@@ -135,6 +135,14 @@ export const CATEGORY_LABELS: Record<OccurrenceCategory, string> = {
     [OccurrenceCategory.USO_INADEQUADO_DE_DISPOSITIVOS]: 'Uso Inadequado de Dispositivos Eletrônicos',
     [OccurrenceCategory.XENOFOBIA]: 'Xenofobia',
     [OccurrenceCategory.OUTRO]: 'Outro Tipo de Ocorrência',
+    // Simplified teacher-facing categories
+    [OccurrenceCategory.DISCRIMINACAO]: 'Discriminação',
+    [OccurrenceCategory.VIOLENCIA_FISICA]: 'Violência Física',
+    [OccurrenceCategory.VIOLENCIA_VERBAL]: 'Violência Verbal',
+    [OccurrenceCategory.CONSUMO_DE_SUBSTANCIAS]: 'Consumo de Substâncias',
+    [OccurrenceCategory.PORTE_DE_ARMAS]: 'Porte de Armas',
+    [OccurrenceCategory.SOFRIMENTO_EMOCIONAL]: 'Sofrimento Emocional',
+    [OccurrenceCategory.EMERGENCIA_DE_SAUDE]: 'Emergência de Saúde',
 };
 
 // ============================================================
@@ -197,7 +205,39 @@ export const FINAL_CATEGORY_LABELS: Record<OccurrenceFinalCategory, string> = {
 export const FINAL_CATEGORIES: OccurrenceFinalCategory[] = Object.values(OccurrenceFinalCategory);
 
 // ============================================================
-// Pre-generated descriptions for categories 1-27
+// ============================================================
+// Teacher-facing simplified categories (9 options shown at occurrence creation)
+// ============================================================
+
+export const TEACHER_CATEGORIES: OccurrenceCategory[] = [
+    OccurrenceCategory.DISCRIMINACAO,
+    OccurrenceCategory.VIOLENCIA_FISICA,
+    OccurrenceCategory.VIOLENCIA_VERBAL,
+    OccurrenceCategory.CONSUMO_DE_SUBSTANCIAS,
+    OccurrenceCategory.PORTE_DE_ARMAS,
+    OccurrenceCategory.DANOS_AO_PATRIMONIO,
+    OccurrenceCategory.INDISCIPLINA,
+    OccurrenceCategory.SOFRIMENTO_EMOCIONAL,
+    OccurrenceCategory.EMERGENCIA_DE_SAUDE,
+];
+
+// Pre-written templates for teacher categories.
+// Tokens [DATA], [NOME DO ALUNO], [TURMA], [LOCAL], [HORA] are auto-filled at creation time.
+// Remaining prompts in [MAIÚSCULAS] must be replaced by the teacher with real case details.
+export const TEACHER_CATEGORY_DEFAULT_DESCRIPTIONS: Partial<Record<OccurrenceCategory, string>> = {
+    [OccurrenceCategory.DISCRIMINACAO]: 'No dia [DATA], o(a) aluno(a) [NOME DO ALUNO], da turma [TURMA], praticou ato de discriminação em [LOCAL]. A conduta consistiu em [DESCREVA: palavras ofensivas / exclusão intencional / piadas preconceituosas / gestos depreciativos], direcionada a [NOME DO COLEGA OU DESCREVA O GRUPO AFETADO]. O episódio gerou [DESCREVA O IMPACTO: constrangimento / intimidação / mal-estar] no ambiente escolar. A equipe pedagógica tomou ciência do ocorrido e registrou a situação para as devidas providências.',
+    [OccurrenceCategory.VIOLENCIA_FISICA]: 'No dia [DATA], em [LOCAL], o(a) aluno(a) [NOME DO ALUNO], da turma [TURMA], envolveu-se em episódio de violência física com [NOME DO ENVOLVIDO]. A agressão consistiu em [DESCREVA: empurrões / socos / chutes / tapas / outros]. [INFORME SE HOUVE FERIMENTOS E QUAIS.] A equipe escolar interveio imediatamente para conter a situação e garantir a segurança de todos os envolvidos.',
+    [OccurrenceCategory.VIOLENCIA_VERBAL]: 'No dia [DATA], em [LOCAL], o(a) aluno(a) [NOME DO ALUNO], da turma [TURMA], envolveu-se em conflito verbal com [NOME DO ENVOLVIDO]. Durante o episódio, foram proferidos [DESCREVA: palavrões / ameaças / insultos / xingamentos / expressões de desrespeito]. O incidente [DESCREVA O IMPACTO: perturbou o andamento da aula / gerou clima de tensão / assustou os colegas] e foi mediado pela equipe escolar.',
+    [OccurrenceCategory.CONSUMO_DE_SUBSTANCIAS]: 'No dia [DATA], em [LOCAL], o(a) aluno(a) [NOME DO ALUNO], da turma [TURMA], foi flagrado(a) [consumindo / em posse de] [ESPECIFIQUE A SUBSTÂNCIA: álcool / cigarro / cigarro eletrônico / substância ilícita / medicamento sem prescrição]. [DESCREVA AS CIRCUNSTÂNCIAS: se estava sozinho(a) ou acompanhado(a) e como foi identificado(a).] A equipe escolar [DESCREVA AS MEDIDAS: apreendeu o material / orientou o aluno / acionou a gestão] e registrou o ocorrido para acompanhamento.',
+    [OccurrenceCategory.PORTE_DE_ARMAS]: 'No dia [DATA], em [LOCAL], o(a) aluno(a) [NOME DO ALUNO], da turma [TURMA], foi encontrado(a) portando [ESPECIFIQUE O OBJETO: faca / estilete / tesoura pontiaguda / arma de brinquedo / arma de fogo]. [DESCREVA AS CIRCUNSTÂNCIAS: como o objeto foi descoberto e se havia situação de ameaça.] O objeto foi imediatamente apreendido pela equipe escolar. [DESCREVA AS PROVIDÊNCIAS: acionamento da gestão / contato com os responsáveis / acionamento das autoridades competentes.]',
+    [OccurrenceCategory.DANOS_AO_PATRIMONIO]: 'No dia [DATA], em [LOCAL], o(a) aluno(a) [NOME DO ALUNO], da turma [TURMA], causou danos ao patrimônio escolar. O(a) aluno(a) [DESCREVA O QUE OCORREU: danificou / quebrou / pichrou / amassou] [DESCREVA O BEM AFETADO: carteira / vidro / equipamento / parede / porta]. [INFORME SE O ATO FOI INTENCIONAL OU ACIDENTAL E O CONTEXTO.] O ocorrido foi comunicado à equipe gestora para as devidas providências.',
+    [OccurrenceCategory.INDISCIPLINA]: 'No dia [DATA], durante atividade em [LOCAL], o(a) aluno(a) [NOME DO ALUNO], da turma [TURMA], apresentou comportamento de indisciplina. A conduta consistiu em [DESCREVA: uso indevido do celular / recusa em realizar atividades / conversas que perturbaram a aula / desrespeito ao(à) professor(a) / outros]. [DESCREVA AS ORIENTAÇÕES JÁ REALIZADAS E A REAÇÃO DO ALUNO.] O comportamento comprometeu o andamento das atividades pedagógicas.',
+    [OccurrenceCategory.SOFRIMENTO_EMOCIONAL]: 'No dia [DATA], em [LOCAL], o(a) aluno(a) [NOME DO ALUNO], da turma [TURMA], demonstrou sinais de sofrimento emocional. Foram observados [DESCREVA OS SINAIS: choro / agressividade incomum / isolamento social / tristeza profunda / marcas de automutilação / ansiedade intensa / outros]. [DESCREVA O CONTEXTO E SE O ALUNO RELATOU ALGO SOBRE A SITUAÇÃO.] A equipe pedagógica foi comunicada para acolhimento e encaminhamento adequado.',
+    [OccurrenceCategory.EMERGENCIA_DE_SAUDE]: 'No dia [DATA], às [HORA], o(a) aluno(a) [NOME DO ALUNO], da turma [TURMA], apresentou [DESCREVA O MAL-ESTAR: mal súbito / desmaio / crise alérgica / crise epiléptica / dores intensas / sangramento / outros] em [LOCAL]. [DESCREVA COMO A SITUAÇÃO SE DESENVOLVEU.] A equipe escolar [DESCREVA AS PROVIDÊNCIAS: acionou o SAMU / chamou os responsáveis / prestou primeiros socorros]. [DESCREVA O DESFECHO: encaminhado ao hospital / responsáveis vieram buscá-lo / se recuperou no local.]',
+};
+
+// ============================================================
+// Pre-generated descriptions for legacy categories (backward compat)
 // ============================================================
 
 export const CATEGORY_DEFAULT_DESCRIPTIONS: Partial<Record<OccurrenceCategory, string>> = {

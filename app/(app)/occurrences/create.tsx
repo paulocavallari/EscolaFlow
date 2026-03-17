@@ -35,7 +35,7 @@ import { useStudentsList, useClassesList } from '../../../src/hooks/useStudents'
 import { useCreateOccurrence } from '../../../src/hooks/useOccurrences';
 import { AIProcessingIndicator } from '../../../src/components/AIProcessingIndicator';
 import { useProfile } from '../../../src/hooks/useProfile';
-import { COLORS, LOCATION_LABELS, CATEGORY_LABELS, CATEGORY_DEFAULT_DESCRIPTIONS } from '../../../src/lib/constants';
+import { COLORS, LOCATION_LABELS, CATEGORY_LABELS, TEACHER_CATEGORIES, TEACHER_CATEGORY_DEFAULT_DESCRIPTIONS } from '../../../src/lib/constants';
 import { Student, StudentWithRelations, OccurrenceLocation, OccurrenceCategory } from '../../../src/types/database';
 import { sendWhatsAppMessage } from '../../../src/services/whatsappService';
 import { useAITextProcessing } from '../../../src/hooks/useAITextProcessing';
@@ -482,7 +482,7 @@ export default function CreateOccurrenceScreen() {
                             </View>
 
                             <FlatList
-                                data={(Object.keys(CATEGORY_LABELS) as OccurrenceCategory[]).filter((cat) =>
+                                data={TEACHER_CATEGORIES.filter((cat) =>
                                     CATEGORY_LABELS[cat].toLowerCase().includes(categorySearch.toLowerCase())
                                 )}
                                 keyExtractor={(item) => item}
@@ -522,10 +522,20 @@ export default function CreateOccurrenceScreen() {
                                         <TouchableOpacity
                                             style={[styles.nextButton, { flex: 1, paddingVertical: 14, backgroundColor: colors.primary }]}
                                             onPress={() => {
-                                                if (selectedCategory !== OccurrenceCategory.OUTRO && CATEGORY_DEFAULT_DESCRIPTIONS[selectedCategory]) {
+                                                const template = TEACHER_CATEGORY_DEFAULT_DESCRIPTIONS[selectedCategory!];
+                                                if (template) {
+                                                    const now = new Date();
+                                                    const data = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                                    const hora = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                                                    const filled = template
+                                                        .replace(/\[NOME DO ALUNO\]/g, selectedStudent?.name ?? '[NOME DO ALUNO]')
+                                                        .replace(/\[TURMA\]/g, selectedStudent?.class?.name ?? '[TURMA]')
+                                                        .replace(/\[LOCAL\]/g, selectedLocation ? LOCATION_LABELS[selectedLocation] : '[LOCAL]')
+                                                        .replace(/\[DATA\]/g, data)
+                                                        .replace(/\[HORA\]/g, hora);
                                                     setUsePreGenerated(true);
-                                                    setOriginalText(CATEGORY_DEFAULT_DESCRIPTIONS[selectedCategory]!);
-                                                    setFormalText(CATEGORY_DEFAULT_DESCRIPTIONS[selectedCategory]!);
+                                                    setOriginalText(filled);
+                                                    setFormalText(filled);
                                                 } else {
                                                     setUsePreGenerated(false);
                                                 }
@@ -578,7 +588,7 @@ export default function CreateOccurrenceScreen() {
                                         <Text style={[styles.preGeneratedTitle, { color: colors.primary }]}>Descrição Pré-gerada</Text>
                                     </View>
                                     <Text style={[styles.preGeneratedHint, { color: colors.onSurfaceVariant }]}>
-                                        Uma descrição padrão foi gerada para a categoria selecionada. Você pode usá-la diretamente, editá-la, ou gravar/digitar um novo relato.
+                                        As informações do aluno, turma, local e data foram preenchidas automaticamente. Complete os campos em MAIÚSCULAS dentro dos colchetes com os detalhes específicos da ocorrência antes de salvar.
                                     </Text>
                                     <TextInput
                                         style={[styles.textInputArea, { backgroundColor: colors.surface, borderColor: colors.outline + '50', color: colors.onSurface }]}
