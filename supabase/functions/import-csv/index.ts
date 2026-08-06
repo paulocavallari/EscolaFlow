@@ -21,6 +21,8 @@ interface ImportResult {
     errors: Array<{ row: number; message: string }>;
 }
 
+type RowError = ImportResult['errors'][number];
+
 function parseCSV(csvText: string): CSVRow[] {
     const lines = csvText.trim().split('\n');
     if (lines.length < 2) return [];
@@ -54,6 +56,36 @@ function parseCSV(csvText: string): CSVRow[] {
     }
 
     return rows;
+}
+
+function validateRowReferences(
+    row: CSVRow,
+    rowNum: number,
+    validClassIds: Set<string>,
+    validTutorIds: Set<string>
+): RowError | null {
+    if (!validClassIds.has(row.turma_id)) {
+        return { row: rowNum, message: `Turma ID "${row.turma_id}" não encontrada` };
+    }
+
+    if (row.tutor_id && !validTutorIds.has(row.tutor_id)) {
+        return { row: rowNum, message: `Tutor ID "${row.tutor_id}" não encontrado` };
+    }
+
+    return null;
+}
+
+function getInsertRowError(
+    insertError: { code?: string; message: string },
+    rowNum: number,
+    matricula: string
+): RowError {
+    if (insertError.code === '23505') {
+        // Unique violation (duplicate matricula)
+        return { row: rowNum, message: `RA "${matricula}" já existe` };
+    }
+
+    return { row: rowNum, message: insertError.message };
 }
 
 serve(async (req: Request) => {
@@ -125,16 +157,9 @@ serve(async (req: Request) => {
             const row = rows[i];
             const rowNum = i + 2; // 1-indexed + header
 
-            // Validate class exists
-            if (!validClassIds.has(row.turma_id)) {
-                result.errors.push({ row: rowNum, message: `Turma ID "${row.turma_id}" não encontrada` });
-                result.skipped++;
-                continue;
-            }
-
-            // Validate tutor if provided
-            if (row.tutor_id && !validTutorIds.has(row.tutor_id)) {
-                result.errors.push({ row: rowNum, message: `Tutor ID "${row.tutor_id}" não encontrado` });
+            const rowValidationError = validateRowReferences(row, rowNum, validClassIds, validTutorIds);
+            if (rowValidationError) {
+                result.errors.push(rowValidationError);
                 result.skipped++;
                 continue;
             }
@@ -150,14 +175,8 @@ serve(async (req: Request) => {
                 });
 
             if (insertError) {
-                if (insertError.code === '23505') {
-                    // Unique violation (duplicate matricula)
-                    result.errors.push({ row: rowNum, message: `RA "${row.matricula}" já existe` });
-                    result.skipped++;
-                } else {
-                    result.errors.push({ row: rowNum, message: insertError.message });
-                    result.skipped++;
-                }
+                result.errors.push(getInsertRowError(insertError, rowNum, row.matricula));
+                result.skipped++;
             } else {
                 result.inserted++;
             }
